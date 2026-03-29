@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { C } from "../racing/tokens";
 import TrackMap from "../racing/TrackMap";
 
@@ -7,6 +7,21 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
+  const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
+  const heroRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = heroRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = (e.clientX - rect.left) / rect.width - 0.5;
+    const cy = (e.clientY - rect.top) / rect.height - 0.5;
+    setGridOffset({ x: cx * 18, y: cy * 14 });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setGridOffset({ x: 0, y: 0 });
+  }, []);
+
   const features = [
     { icon: "◎", title: "Corner-by-Corner Feedback", desc: "Every braking zone, apex, and exit analyzed against reference telemetry." },
     { icon: "⚡", title: "Live Telemetry Coaching", desc: "Real-time prompts during your session. Brake later. Carry more speed. Good exit." },
@@ -14,9 +29,9 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
   ];
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
-      <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
+      <div ref={heroRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
         <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,248,192,0.04) 0%, transparent 70%)` }} />
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px)", backgroundSize: "80px 80px" }} />
+        <div style={{ position: "absolute", inset: "-20px", backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px)", backgroundSize: "80px 80px", transform: `translate(${gridOffset.x}px, ${gridOffset.y}px)`, transition: "transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)", willChange: "transform" }} />
         <div style={{ position: "absolute", top: "10%", right: "-5%", opacity: 0.06 }}>
           <TrackMap width={600} height={420} compact />
         </div>
