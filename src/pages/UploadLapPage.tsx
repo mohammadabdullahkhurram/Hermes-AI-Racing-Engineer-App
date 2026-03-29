@@ -21,7 +21,7 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
 
   const handleAnalyze = () => {
     setStatus("analyzing");
-    setTimeout(() => { setStatus("done"); setTimeout(() => navigate("analysis", { demo: true }), 800); }, 1800);
+    setTimeout(() => { setStatus("done"); setTimeout(() => navigate("analysis"), 800); }, 1800);
   };
 
   return (

@@ -12,7 +12,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   const [filter, setFilter] = useState("latest");
   const { data: apiLaps, isError } = useLaps();
 
-  // Use API data if available, fall back to demo data
+  // Use API data if available
   const rawLaps = (apiLaps && apiLaps.length > 0) ? apiLaps.map((l, i) => ({
     id: l.lap_id,
     lap_number: l.lap_id,
