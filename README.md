@@ -3,7 +3,7 @@
 ## 👥 Team Members
 
 - Mohammad Abdullah Khurram  - mkhurram@constructor.university
-- David Rusiia - drusiia@constructor.university
+- David Rusiia - drusia@constructor.university
 - Saba Khaburzania - skhaburzania@constructor.university
 
 ## 🔗 Project Links
