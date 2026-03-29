@@ -23,7 +23,7 @@ except ImportError:
     import requests
 
 
-TRACK_ROOT = Path(r"M:\SteamLibrary\steamapps\common\assettocorsa\content\tracks\acu_yasmarina\north")
+TRACK_ROOT = Path(r"C:\Program Files (x86)\Steam\steamapps\common\assettocorsa\content\tracks\ks_abu_dhabi\north")
 MAP_PNG = TRACK_ROOT / "map.png"
 MAP_INI = TRACK_ROOT / "data" / "map.ini"
 
