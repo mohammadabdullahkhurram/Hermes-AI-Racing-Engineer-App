@@ -74,10 +74,11 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         throttle: Math.round((uploadedTelemetry.throttle[i] || 0) * 100),
         brake: Math.round((uploadedTelemetry.brake[i] || 0) * 100),
         steering: Math.round((uploadedTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+        worldX: uploadedTelemetry.car_x?.[i] ?? uploadedTelemetry.x?.[i] ?? 0,
+        worldY: uploadedTelemetry.car_z?.[i] ?? uploadedTelemetry.y?.[i] ?? 0,
       }))
     : isDemo && demoTelem
     ? demoTelem.comp.dist_m.map((d: number, i: number) => {
-        // Find closest ref point by distance
         const refIdx = demoTelem.ref.dist_m.findIndex((rd: number) => rd >= d);
         const ri = refIdx >= 0 ? refIdx : demoTelem.ref.dist_m.length - 1;
         return {
@@ -90,6 +91,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
           refThrottle: Math.round((demoTelem.ref.throttle[ri] || 0) * 100),
           refBrake: Math.round((demoTelem.ref.brake[ri] || 0) * 100),
           refSteering: Math.round((demoTelem.ref.steering[ri] || 0) * (180 / Math.PI)),
+          worldX: demoTelem.comp.x?.[i] ?? 0,
+          worldY: demoTelem.comp.y?.[i] ?? 0,
         };
       })
     : apiTelemetry ? apiTelemetry.dist_m.map((d: number, i: number) => ({
@@ -99,6 +102,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
         brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
         steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+        worldX: apiTelemetry.x?.[i] ?? apiTelemetry.car_x?.[i] ?? 0,
+        worldY: apiTelemetry.y?.[i] ?? apiTelemetry.car_z?.[i] ?? 0,
       })) : [];
 
   if (!isDemo && !isUploaded && (loadingAnalysis || loadingCoaching)) {
