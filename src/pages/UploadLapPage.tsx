@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { C } from "../racing/tokens";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
-import { getApiBaseUrl } from "../services/telemetryApi";
+
 
 interface UploadLapPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;

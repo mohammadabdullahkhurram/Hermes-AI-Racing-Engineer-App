@@ -3,7 +3,7 @@ import { C } from "../racing/tokens";
 import { Pill } from "../racing/SharedUI";
 import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
 import RealTrackMap from "../racing/RealTrackMap";
-import { getApiBaseUrl, setApiBaseUrl } from "../services/telemetryApi";
+
 
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -25,10 +25,6 @@ const STATUS_LABEL: Record<string, { text: string; color: string }> = {
 const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const { telemetry: t, connected, error } = useLiveTelemetry(300);
 
-  // Backend URL settings
-  const [showSettings, setShowSettings] = useState(false);
-  const [urlInput, setUrlInput] = useState(getApiBaseUrl());
-  const [savedUrl, setSavedUrl] = useState(getApiBaseUrl());
 
   const active = connected && t.status === "recording";
   const statusInfo = connected ? (STATUS_LABEL[t.status] || STATUS_LABEL.waiting) : { text: "DISCONNECTED", color: C.muted };
