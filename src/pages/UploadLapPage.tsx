@@ -26,7 +26,7 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
     setStatus("analyzing");
     setErrorMsg("");
     try {
-      const base = getApiBaseUrl();
+      const base = import.meta.env.VITE_SUPABASE_URL || "";
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${base}/upload`, { method: "POST", body: formData });
