@@ -23,9 +23,21 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
   const isDemo = context.demo === true;
   const lapId = isDemo ? null : (context.lap_id as number) || null;
 
-  const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(lapId);
-  const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(lapId);
-  const { data: apiTelemetry } = useLapTelemetry(lapId);
+  // For demo laps from output/laps/ folder (e.g. navigated from Lap History with demo flag)
+  const isDemoLap = isDemo && lapId !== null;
+
+  const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(isDemoLap ? null : lapId);
+  const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(isDemoLap ? null : lapId);
+  const { data: apiTelemetry } = useLapTelemetry(isDemoLap ? null : lapId);
+
+  // Load demo lap data from output/laps/ folder
+  const [demoLapAnalysis, setDemoLapAnalysis] = useState<LapAnalysis | null>(null);
+  const [demoLapCoaching, setDemoLapCoaching] = useState<CoachingReport | null>(null);
+  useEffect(() => {
+    if (!isDemoLap || !lapId) return;
+    fetchDemoLapAnalysis(lapId).then(setDemoLapAnalysis).catch(() => {});
+    fetchDemoLapCoaching(lapId).then(setDemoLapCoaching).catch(() => {});
+  }, [isDemoLap, lapId]);
 
   // Demo telemetry loaded from public/data
   const [demoTelem, setDemoTelem] = useState<any>(null);
@@ -37,8 +49,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
       .catch(() => {});
   }, [isDemo]);
 
-  const analysis = isDemo ? sampleAnalysis : (apiAnalysis || null);
-  const coaching = isDemo ? sampleCoaching : (apiCoaching || null);
+  const analysis = isDemoLap ? (demoLapAnalysis || sampleAnalysis) : isDemo ? sampleAnalysis : (apiAnalysis || null);
+  const coaching = isDemoLap ? (demoLapCoaching || sampleCoaching) : isDemo ? sampleCoaching : (apiCoaching || null);
 
   const telemData = isDemo && demoTelem
     ? demoTelem.comp.dist_m.map((d: number, i: number) => {
