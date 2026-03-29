@@ -223,7 +223,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
           <BoundaryTrackMap
             trackX={telemData.map((d: any) => d.worldX ?? 0)}
             trackY={telemData.map((d: any) => d.worldY ?? 0)}
-            trackDelta={telemData.map((d: any) => (d.compSpeed || 0) - (d.refSpeed || 0) > 0 ? -(d.compSpeed - d.refSpeed) : Math.abs((d.refSpeed || 0) - (d.compSpeed || 0)))}
+            trackDelta={telemData.map((d: any) => (d.refSpeed || 0) - (d.compSpeed || 0))}
             corners={(analysis.corners || []).map((c: any) => ({
               name: c.corner_name,
               dist_m: c.dist_m,
