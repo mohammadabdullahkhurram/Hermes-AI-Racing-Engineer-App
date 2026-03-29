@@ -11,17 +11,14 @@ export const MAP_CONFIG = {
   X_OFFSET: 415.172,
   Z_OFFSET: 333.286,
   DRAWING_SIZE: 10,
-  // The actual map.png image dimensions
-  IMG_WIDTH: 1306, // WIDTH + 2*MARGIN
-  IMG_HEIGHT: 648,  // HEIGHT + 2*MARGIN
 } as const;
 
 /**
- * Convert AC world coordinates (x, z) to pixel position on the map image.
- * Matches the formula used by ac_recorder.py for live driver tracking.
+ * Convert AC world coordinates (x, z) to base map pixel coordinates.
+ * Matches the recorder exactly: px = (x + x_offset) / scale_factor
  */
 export function worldToPixel(x: number, z: number): { px: number; py: number } {
-  const px = (x + MAP_CONFIG.X_OFFSET) * MAP_CONFIG.SCALE_FACTOR + MAP_CONFIG.MARGIN;
-  const py = (z + MAP_CONFIG.Z_OFFSET) * MAP_CONFIG.SCALE_FACTOR + MAP_CONFIG.MARGIN;
+  const px = (x + MAP_CONFIG.X_OFFSET) / MAP_CONFIG.SCALE_FACTOR;
+  const py = (z + MAP_CONFIG.Z_OFFSET) / MAP_CONFIG.SCALE_FACTOR;
   return { px, py };
 }
