@@ -77,6 +77,7 @@ export interface CoachingReport {
   sector_feedback: SectorFeedback[];
   corner_coaching: CornerCoaching[];
   positive_observations: string[];
+  telemetry_summary?: any;
 }
 
 export interface PriorityAction {
