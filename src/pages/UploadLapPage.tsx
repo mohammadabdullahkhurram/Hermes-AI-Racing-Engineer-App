@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { C } from "../racing/tokens";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
+import { getBackendUrlSetting } from "../services/api";
 
 interface UploadLapPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -9,7 +10,8 @@ interface UploadLapPageProps {
 const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<"idle" | "analyzing" | "done">("idle");
+  const [status, setStatus] = useState<"idle" | "analyzing" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -19,9 +21,23 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
     if (f) setFile(f);
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
+    if (!file) return;
     setStatus("analyzing");
-    setTimeout(() => { setStatus("done"); setTimeout(() => navigate("analysis"), 800); }, 1800);
+    setErrorMsg("");
+    try {
+      const base = getBackendUrlSetting();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${base}/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed");
+      setStatus("done");
+      setTimeout(() => navigate("analysis", { lap_id: data.lap_id }), 800);
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(err.message || "Could not reach backend. Is server.py running?");
+    }
   };
 
   return (
