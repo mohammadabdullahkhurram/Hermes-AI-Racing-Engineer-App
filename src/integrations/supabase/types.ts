@@ -14,7 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      lap_history: {
+        Row: {
+          created_at: string
+          id: string
+          lap: number
+          samples: number
+          time: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lap: number
+          samples?: number
+          time: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lap?: number
+          samples?: number
+          time?: string
+        }
+        Relationships: []
+      }
+      latest_telemetry: {
+        Row: {
+          brake: number
+          car_x: number | null
+          car_z: number | null
+          coaching: Json
+          cur_time: string
+          gear: number
+          heading_rad: number
+          history: Json
+          id: number
+          lap_num: number
+          path: Json
+          pixel_x: number | null
+          pixel_y: number | null
+          samples: number
+          speed: number
+          status: string
+          throttle: number
+          updated_at: string
+        }
+        Insert: {
+          brake?: number
+          car_x?: number | null
+          car_z?: number | null
+          coaching?: Json
+          cur_time?: string
+          gear?: number
+          heading_rad?: number
+          history?: Json
+          id?: number
+          lap_num?: number
+          path?: Json
+          pixel_x?: number | null
+          pixel_y?: number | null
+          samples?: number
+          speed?: number
+          status?: string
+          throttle?: number
+          updated_at?: string
+        }
+        Update: {
+          brake?: number
+          car_x?: number | null
+          car_z?: number | null
+          coaching?: Json
+          cur_time?: string
+          gear?: number
+          heading_rad?: number
+          history?: Json
+          id?: number
+          lap_num?: number
+          path?: Json
+          pixel_x?: number | null
+          pixel_y?: number | null
+          samples?: number
+          speed?: number
+          status?: string
+          throttle?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
