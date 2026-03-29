@@ -38,6 +38,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, justifyContent: "center", marginBottom: 16 }}>
             <button onClick={() => navigate("upload")} className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.text, padding: "14px 28px", borderRadius: 10, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>↑ Upload Lap</button>
             <button onClick={() => navigate("live")} className="btn-primary" style={{ background: C.teal, color: "#0a0a0c", padding: "14px 32px", borderRadius: 10, cursor: "pointer", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", border: "none" }}>◉ LIVE MODE</button>
+            <button onClick={() => navigate("history")} className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.text, padding: "14px 28px", borderRadius: 10, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>⏱ Lap History</button>
             <button onClick={() => navigate("analysis", { demo: true })} className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.text, padding: "14px 28px", borderRadius: 10, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>◈ View Example Analysis</button>
           </div>
         </div>
