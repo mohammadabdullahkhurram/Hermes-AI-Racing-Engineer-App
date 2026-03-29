@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { C } from "../racing/tokens";
 import TrackMap from "../racing/TrackMap";
 
@@ -7,6 +7,18 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
+  const heroRef = useRef<HTMLDivElement>(null);
+  const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = heroRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setMousePos({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    });
+  }, []);
+
   const features = [
     { icon: "◎", title: "Corner-by-Corner Feedback", desc: "Every braking zone, apex, and exit analyzed against reference telemetry." },
     { icon: "⚡", title: "Live Telemetry Coaching", desc: "Real-time prompts during your session. Brake later. Carry more speed. Good exit." },
@@ -14,7 +26,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
   ];
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
-      <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
+      <div ref={heroRef} onMouseMove={handleMouseMove} style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
         <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,248,192,0.04) 0%, transparent 70%)` }} />
         <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px)", backgroundSize: "80px 80px" }} />
         <div style={{ position: "absolute", top: "10%", right: "-5%", opacity: 0.06 }}>
