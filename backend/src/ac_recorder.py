@@ -3,11 +3,11 @@ ac_recorder.py — AI Race Engineer · Lap Recorder
 Run on your Windows PC while Assetto Corsa is open.
 
 1. Start AC, load Yas Marina North
-2. Run: python ac_recorder.py
-3. Enter Mac IP once
+2. Start server.py in another terminal: python server.py
+3. Run: python ac_recorder.py
 4. Open http://localhost:9000 in your browser on the PC
 5. Drive — recording starts when you cross S/F line
-6. Data sends to Mac automatically, CSV saved to Desktop
+6. Data sends to server.py (localhost) automatically, CSV saved to Desktop
 """
 
 import ctypes, mmap, csv, time, sys, os, io, json, threading, math
@@ -43,8 +43,7 @@ state = {
     "cur_time":  "0:00.000",
     "throttle":  0,
     "brake":     0,
-    "mac_ip":    "",
-    "mac_port":  8080,
+    "server_url": "http://localhost:8080",
     "history":   [],          # list of {lap, time, samples}
     "connected": False,
     "car_x": None,
@@ -461,7 +460,7 @@ async function poll() {
     const wHis = document.getElementById('waitingHistory');
     const mLink= document.getElementById('macLink');
 
-    if (data.mac_ip) mLink.textContent = data.mac_ip + ':' + data.mac_port;
+    if (data.server_url) mLink.textContent = data.server_url;
 
     dot.className  = 'status-dot '  + data.status;
     stxt.className = 'status-text ' + data.status;
@@ -479,7 +478,7 @@ async function poll() {
       sampleHistory.length = 0;
     } else if (data.status === 'recording' || data.status === 'sending' || data.status === 'done') {
       stxt.textContent = data.status==='recording' ? '● RECORDING' :
-                         data.status==='sending'   ? 'Sending to Mac...' : '✓ Lap complete';
+                         data.status==='sending'   ? 'Sending to server...' : '✓ Lap complete';
       wMsg.style.display = 'none';
       rUI.style.display  = 'block';
       wHis.style.display = 'none';
@@ -674,12 +673,12 @@ coaching_state = {
 }
 
 
-def load_reference(mac_ip, port):
-    """Fetch reference lap data from Mac server.
+def load_reference(server_url):
+    """Fetch reference lap data from server.
     Boundaries are fetched separately so map shows even before lap processing."""
     # Step 1: always try to load boundaries (available immediately on server start)
     try:
-        r_bnd = requests.get(f"http://{mac_ip}:{port}/api/boundaries", timeout=5)
+        r_bnd = requests.get(f"{server_url}/api/boundaries", timeout=5)
         bnd   = r_bnd.json()
         if bnd.get("ok"):
             ref_data["left_bnd"]  = bnd.get("left_bnd",  [])
@@ -691,7 +690,7 @@ def load_reference(mac_ip, port):
 
     # Step 2: try to load full reference lap
     try:
-        r = requests.get(f"http://{mac_ip}:{port}/api/reference", timeout=10)
+        r = requests.get(f"{server_url}/api/reference", timeout=10)
         data = r.json()
         if "error" in data:
             print(f"  Reference lap not ready yet: {data['error']}")
@@ -915,8 +914,8 @@ def save_to_desktop(csv_text, lap_num):
     return str(path)
 
 
-def send_to_mac(csv_text, mac_ip, port, lap_num, ac_lap_time_ms=None):
-    url   = f"http://{mac_ip}:{port}/upload"
+def send_to_server(csv_text, server_url, lap_num, ac_lap_time_ms=None):
+    url   = f"{server_url}/upload"
     fname = f"ac_lap{lap_num}.csv"
     files = {"file": (fname, csv_text.encode("utf-8"), "text/csv")}
     # Send the actual AC lap time so server uses it directly (bypasses computed time)
@@ -1020,12 +1019,14 @@ def main():
         print(f"ERROR: Track map.ini not found: {MAP_INI}")
         sys.exit(1)
 
-    print()
-    mac_ip = input("Mac IP address (e.g. 192.168.1.10): ").strip()
-    port   = 8080
+    # Server URL: default localhost, override with env var or command-line arg
+    server_url = os.environ.get("SERVER_URL", "http://localhost:8080")
+    if len(sys.argv) > 1:
+        server_url = sys.argv[1]
+        if not server_url.startswith("http"):
+            server_url = f"http://{server_url}:8080"
 
-    state["mac_ip"]   = mac_ip
-    state["mac_port"] = port
+    state["server_url"] = server_url
     state["map"] = load_map_ini(MAP_INI)
 
     # Start live UI server
@@ -1044,19 +1045,18 @@ def main():
         print(f"Opening browser at http://localhost:{UI_PORT}")
         print(f"If browser doesn't open, go there manually\n")
 
-    # Test Mac connection and load reference
-    print(f"Testing Mac connection...", end="", flush=True)
+    # Test server connection and load reference
+    print(f"Testing server connection ({server_url})...", end="", flush=True)
     try:
-        requests.get(f"http://{mac_ip}:{port}/", timeout=5)
+        requests.get(f"{server_url}/", timeout=5)
         print(" Connected ✓")
-        print(f"Loading reference lap from Mac...", end="", flush=True)
-        if load_reference(mac_ip, port):
+        print(f"Loading reference lap...", end="", flush=True)
+        if load_reference(server_url):
             print(" Loaded ✓")
         else:
             print(" Not available yet — reference loads after first lap processed")
-            print("  Tip: run test.py on Mac first to pre-generate fast_laps.json")
     except Exception:
-        print(f" Cannot reach {mac_ip}:{port} — make sure server.py is running on Mac")
+        print(f" Cannot reach {server_url} — make sure server.py is running")
 
     # Connect to AC shared memory
     print("\nConnecting to Assetto Corsa...", end="", flush=True)
@@ -1115,7 +1115,7 @@ def main():
         # Retry loading reference if not loaded yet
         if not ref_data["loaded"]:
             print(f"  Retrying reference load...", end="", flush=True)
-            if load_reference(mac_ip, port):
+            if load_reference(server_url):
                 print(" Loaded ✓")
             else:
                 print(" Still not available")
@@ -1296,13 +1296,13 @@ def main():
             state["history"].append(lap_entry)
             state["status"] = "sending"
 
-            # Send to Mac in background so recording can restart immediately
+            # Send to server in background so recording can restart immediately
             def send_async(csv_text=csv_text, lap_num=lap_num, lap_ms=lap_ms):
-                ok, lt, samps = send_to_mac(csv_text, mac_ip, port, lap_num,
-                                            ac_lap_time_ms=lap_ms)
+                ok, lt, samps = send_to_server(csv_text, server_url, lap_num,
+                                               ac_lap_time_ms=lap_ms)
                 if ok:
-                    print(f"\n  Lap {lap_num} sent to Mac OK")
-                    print(f"  Dashboard: http://{mac_ip}:{port}/dashboard")
+                    print(f"\n  Lap {lap_num} sent to server OK")
+                    print(f"  Dashboard: {server_url}/dashboard")
                 else:
                     print(f"\n  Lap {lap_num} send failed — file saved to Desktop")
                 state["status"] = "waiting"

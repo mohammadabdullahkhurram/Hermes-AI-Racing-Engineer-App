@@ -1,8 +1,8 @@
 """
 server.py — AI Race Engineer
-Run once on your Mac. Leave it running all session.
+Run on your Windows PC alongside Assetto Corsa. Leave it running all session.
   pip install flask flask-cors
-  python3 server.py
+  python server.py
 """
 
 import json, os, sys, math, csv, webbrowser, threading, time
@@ -578,10 +578,10 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     print("  AI Race Engineer — Session Manager")
     print("="*50)
-    print(f"  Mac:     http://localhost:8080")
+    print(f"  Local:   http://localhost:8080")
     print(f"  Network: http://{local_ip}:8080")
-    print(f"  Enter this IP in ac_recorder: {local_ip}")
-    print(f"  Frontend: Set VITE_BACKEND_URL=http://{local_ip}:8080")
+    print(f"  Recorder connects to localhost:8080 by default")
+    print(f"  Frontend: paste ngrok URL or http://localhost:8080")
     print("="*50 + "\n")
 
     threading.Thread(target=open_browser, daemon=True).start()
