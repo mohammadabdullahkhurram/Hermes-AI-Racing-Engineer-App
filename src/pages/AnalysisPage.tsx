@@ -57,12 +57,12 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
       .catch(() => {});
   }, [isDemo]);
 
-  const analysis = isUploaded ? uploadedAnalysis
+  const analysis = (isUploaded || isStoredLap) ? uploadedAnalysis
     : isDemoLap ? (demoLapAnalysis || sampleAnalysis)
     : isDemo ? sampleAnalysis
     : (apiAnalysis || null);
 
-  const coaching = isUploaded ? uploadedCoaching
+  const coaching = (isUploaded || isStoredLap) ? uploadedCoaching
     : isDemoLap ? (demoLapCoaching || sampleCoaching)
     : isDemo ? sampleCoaching
     : (apiCoaching || null);
