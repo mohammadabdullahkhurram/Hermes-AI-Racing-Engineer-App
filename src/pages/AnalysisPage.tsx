@@ -6,7 +6,6 @@ import {
 import { C } from "../racing/tokens";
 import { fmtTime, fmtDelta } from "../racing/formatters";
 import { BackBtn } from "../racing/SharedUI";
-import { DEMO_ANALYSIS, DEMO_COACHING, TELEM_DATA } from "../racing/demoData";
 import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
 import TrackMap from "../racing/TrackMap";
 
@@ -20,24 +19,22 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
   const [activeCorner, setActiveCorner] = useState<string | null>(null);
 
   const lapId = (context.lap_id as number) || null;
-  const isDemo = context.demo === true || !lapId;
 
-  const { data: apiAnalysis } = useLapAnalysis(lapId);
-  const { data: apiCoaching } = useLapCoaching(lapId);
+  const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(lapId);
+  const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(lapId);
   const { data: apiTelemetry } = useLapTelemetry(lapId);
 
-  const analysis = apiAnalysis || DEMO_ANALYSIS;
-  const coaching = apiCoaching || DEMO_COACHING;
+  const analysis = apiAnalysis || null;
+  const coaching = apiCoaching || null;
 
-  // Build telemetry chart data from API or demo
-  const telemData = apiTelemetry ? apiTelemetry.dist_m.map((d, i) => ({
+  const telemData = apiTelemetry ? apiTelemetry.dist_m.map((d: number, i: number) => ({
     dist: d,
-    refSpeed: 0, // Reference not in per-lap telemetry
+    refSpeed: 0,
     compSpeed: Math.round(apiTelemetry.speed_kmh[i] || 0),
     throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
     brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
     steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
-  })) : TELEM_DATA;
+  })) : [];
 
   const summaryCards = [
     { label: "Lap Time", value: fmtTime(analysis.comp_lap_time_s), color: C.text, sub: analysis.comp_label || "your lap" },
@@ -68,8 +65,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
               <BackBtn onClick={() => navigate("history")} />
               <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 42, fontWeight: 700, color: C.text, marginTop: 12, letterSpacing: "-0.01em" }}>
                 Lap Analysis
-                {isDemo && <span style={{ fontSize: 16, color: C.amber, marginLeft: 12, fontWeight: 400 }}>DEMO</span>}
-                {!isDemo && lapId && <span style={{ fontSize: 16, color: C.teal, marginLeft: 12, fontWeight: 400 }}>LAP {lapId}</span>}
+                {lapId && <span style={{ fontSize: 16, color: C.teal, marginLeft: 12, fontWeight: 400 }}>LAP {lapId}</span>}
               </h1>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -81,10 +77,10 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 20px", marginBottom: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
           {([
-            ["Lap", lapId ? `LAP ${lapId}` : "DEMO"],
+            ["Lap", lapId ? `LAP ${lapId}` : "—"],
             ["Track", "Yas Marina"],
-            ["Reference", analysis.ref_label || "fast_laps"],
-            ["Source", isDemo ? "Demo Data" : "AC Live"],
+            ["Reference", analysis?.ref_label || "—"],
+            ["Source", "AC Live"],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>{k}</span>
