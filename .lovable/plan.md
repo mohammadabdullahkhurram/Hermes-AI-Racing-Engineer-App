@@ -1,18 +1,18 @@
 
 
-## Plan: Home Page & NavBar Changes
+## Plan: Center NavBar Links + Driver Profile Icon on Right
 
-### Changes
+### Changes to `src/racing/NavBar.tsx`
 
-**1. NavBar (`src/racing/NavBar.tsx`)**
-- Remove the logo block (the "RE" icon + "AI RACE ENGINEER" text, lines 20-25)
-- Move nav links to the right by removing `flex: 1` from the links container and adding `marginLeft: "auto"`
-- Remove the "CONNECTED" indicator (lines 37-40)
+1. **Remove "Driver Profile" from the center links array** — it moves to the right side.
 
-**2. HomePage (`src/pages/HomePage.tsx`)**
-- Add a "Lap History" button to the main CTA button row (line 38-42), styled consistently with the existing outline buttons, navigating to `"history"`
+2. **Layout the navbar as three sections** using flexbox:
+   - **Left**: "AI RACE ENGINEER" text (clickable, navigates home)
+   - **Center**: Home, Live, Lap History, Upload Lap links (centered with `flex: 1` + `justifyContent: "center"`)
+   - **Right**: A user/driver icon button for Driver Profile (using an inline SVG circle-user icon since we use inline styles throughout)
+
+3. **Driver Profile icon**: Render a small SVG user icon (circle with head silhouette) styled with `C.teal` when active, `C.muted` otherwise. Clicking navigates to `"profile"`.
 
 ### Files Modified
 - `src/racing/NavBar.tsx`
-- `src/pages/HomePage.tsx`
 
