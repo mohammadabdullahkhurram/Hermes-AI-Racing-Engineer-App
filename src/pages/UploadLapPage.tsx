@@ -71,6 +71,10 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
             style={{ flex: 1, minWidth: 160, background: file ? C.teal : C.border, color: file ? "#0a0a0c" : C.muted, border: "none", padding: "16px 24px", borderRadius: 10, cursor: file ? "pointer" : "not-allowed", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
             {status === "analyzing" ? "ANALYZING..." : status === "done" ? "✓ DONE" : "ANALYZE LAP"}
           </button>
+          <button onClick={() => navigate("analysis", { demo: true })}
+            style={{ minWidth: 160, background: "transparent", border: `1px solid rgba(245,158,11,0.4)`, color: C.amber, padding: "16px 24px", borderRadius: 10, cursor: "pointer", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
+            LOAD EXAMPLE
+          </button>
         </div>
 
         {status === "analyzing" && (
