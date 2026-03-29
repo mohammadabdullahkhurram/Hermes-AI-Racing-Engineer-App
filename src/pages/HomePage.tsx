@@ -1,6 +1,6 @@
 import React from "react";
 import { C } from "../racing/tokens";
-import TrackMap from "../racing/TrackMap";
+
 import HeroCanvas from "../racing/HeroCanvas";
 
 interface HomePageProps {
