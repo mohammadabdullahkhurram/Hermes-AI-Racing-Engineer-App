@@ -150,7 +150,7 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                   <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, width: 40 }}>LAP {lap.num}</span>
                   <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.text, flex: 1 }}>{fmtTime(lap.time)}</span>
                   <Pill color="muted">completed</Pill>
-                  <button onClick={() => navigate("analysis", { demo: true })} style={{ background: C.tealBg, border: `1px solid rgba(15,248,192,0.2)`, color: C.teal, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600 }}>View Analysis</button>
+                  <button onClick={() => navigate("analysis", { demo: true })} className="btn-red-accent" style={{ padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600 }}>View Analysis</button>
                 </div>
               ))}
             </div>

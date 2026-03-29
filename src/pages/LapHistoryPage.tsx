@@ -47,7 +47,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
             const borderColor = isBest ? `rgba(15,248,192,0.3)` : isLatest ? `rgba(244,63,94,0.3)` : C.border;
             const accentColor = isBest ? C.teal : isLatest ? C.red : C.muted2;
             return (
-              <div key={lap.id} className="hover-card" style={{ background: C.card, border: `1px solid ${borderColor}`, borderRadius: 14, overflow: "hidden", animationDelay: `${i * 0.05}s` }}>
+              <div key={lap.id} className="hover-card" style={{ background: C.card, border: `1px solid ${borderColor}`, borderRadius: 14, overflow: "hidden", animationDelay: `${i * 0.05}s`, transition: "all 0.25s ease" }}>
                 <div style={{ padding: "16px 20px 12px", background: isBest ? "rgba(15,248,192,0.04)" : isLatest ? "rgba(244,63,94,0.04)" : "transparent", borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
