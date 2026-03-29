@@ -1,62 +1,31 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React from "react";
 import { C } from "../racing/tokens";
 import { fmtTime } from "../racing/formatters";
 import { Pill } from "../racing/SharedUI";
-import { LIVE_COACH_MSGS } from "../racing/demoData";
+import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
+import { useLaps } from "../hooks/useApiData";
 import TrackMap from "../racing/TrackMap";
 
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
 }
 
-interface SessionLap {
-  num: number;
-  time: number;
-}
-
 const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
-  const [active, setActive] = useState(false);
-  const [pos, setPos] = useState(0);
-  const [speed, setSpeed] = useState(0);
-  const [throttle, setThrottle] = useState(0);
-  const [brake, setBrake] = useState(0);
-  const [gear, setGear] = useState(0);
-  const [lapTime, setLapTime] = useState(0);
-  const [lapNum, setLapNum] = useState(1);
-  const [sessionTime, setSessionTime] = useState(0);
-  const [delta, setDelta] = useState(0);
-  const [coachMsg, setCoachMsg] = useState(LIVE_COACH_MSGS[0]);
-  const [sessionLaps, setSessionLaps] = useState<SessionLap[]>([]);
+  const live = useLiveTelemetry(200);
+  const { data: laps } = useLaps();
 
-  useEffect(() => {
-    if (!active) return;
-    const interval = setInterval(() => {
-      setPos(p => { const next = p + 0.004; return next >= 1 ? 0 : next; });
-      setSpeed(Math.round(80 + Math.random() * 160));
-      setThrottle(Math.round(Math.random() * 100));
-      setBrake(Math.round(Math.random() * 40));
-      setGear(Math.floor(Math.random() * 6) + 1);
-      setLapTime(t => t + 0.2);
-      setSessionTime(t => t + 0.2);
-      setDelta(parseFloat((Math.random() * 4 - 2).toFixed(3)));
-    }, 200);
-    return () => clearInterval(interval);
-  }, [active]);
+  const active = live.connected && live.status === "recording";
+  const speed = Math.round(live.speed);
+  const throttle = Math.round(live.throttle * 100);
+  const brake = Math.round(live.brake * 100);
+  const gear = live.gear;
+  const lapTime = live.lap_time;
+  const lapNum = live.lap_num || 1;
+  const delta = live.delta;
+  const pos = live.position;
 
-  useEffect(() => {
-    if (!active) return;
-    const msgInterval = setInterval(() => {
-      setCoachMsg(LIVE_COACH_MSGS[Math.floor(Math.random() * LIVE_COACH_MSGS.length)]);
-    }, 4000);
-    return () => clearInterval(msgInterval);
-  }, [active]);
-
-  const markLap = useCallback(() => {
-    setSessionLaps(prev => [...prev, { num: lapNum, time: lapTime }]);
-    setLapNum(n => n + 1);
-    setLapTime(0);
-    setPos(0);
-  }, [lapNum, lapTime]);
+  // Session laps from backend
+  const sessionLaps = (laps || []).slice(-10);
 
   const telCards = [
     { label: "SPEED", value: `${speed}`, unit: "km/h", color: C.teal },
@@ -65,8 +34,8 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
     { label: "GEAR", value: `${gear}`, unit: "", color: C.amber },
     { label: "LAP TIME", value: fmtTime(lapTime), unit: "", color: C.text },
     { label: "LAP", value: `${lapNum}`, unit: "", color: C.text },
-    { label: "Δ DELTA", value: delta > 0 ? `+${delta}` : `${delta}`, unit: "s", color: delta < 0 ? C.teal : C.red },
-    { label: "STATUS", value: active ? "LIVE" : "IDLE", unit: "", color: active ? C.teal : C.muted },
+    { label: "Δ DELTA", value: delta > 0 ? `+${delta.toFixed(3)}` : `${delta.toFixed(3)}`, unit: "s", color: delta < 0 ? C.teal : C.red },
+    { label: "STATUS", value: active ? "LIVE" : live.connected ? live.status.toUpperCase() : "DISCONNECTED", unit: "", color: active ? C.teal : live.connected ? C.amber : C.muted },
   ];
 
   return (
@@ -80,8 +49,10 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
             </div>
           ))}
           <div style={{ flex: 1, padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: active ? C.teal : C.muted, boxShadow: active ? `0 0 8px ${C.teal}` : "none" }} className={active ? "live-dot" : ""} />
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: active ? C.teal : C.muted }}>{active ? "RECORDING" : "DISCONNECTED"}</span>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: active ? C.teal : live.connected ? C.amber : C.muted, boxShadow: active ? `0 0 8px ${C.teal}` : "none" }} className={active ? "live-dot" : ""} />
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: active ? C.teal : live.connected ? C.amber : C.muted }}>
+              {active ? "RECORDING" : live.connected ? live.status.toUpperCase() : "DISCONNECTED"}
+            </span>
           </div>
         </div>
       </div>
@@ -94,10 +65,12 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 <h2 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>Yas Marina Circuit</h2>
                 <p style={{ fontSize: 12, color: C.muted }}>Abu Dhabi · 5.28 km · 21 Turns</p>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em" }}>SESSION TIME</div>
-                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>{fmtTime(sessionTime)}</div>
-              </div>
+              {!live.connected && (
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.red, letterSpacing: "0.1em" }}>BACKEND OFFLINE</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Start server.py on your Mac</div>
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", justifyContent: "center", padding: "8px 0" }}>
               <TrackMap width={480} height={320} position={active ? pos : null} animated={active} />
@@ -114,22 +87,6 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={() => setActive(true)} disabled={active} className="btn-primary"
-              style={{ background: active ? C.border : C.teal, color: active ? C.muted : "#0a0a0c", border: "none", padding: "12px 20px", borderRadius: 8, cursor: active ? "not-allowed" : "pointer", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
-              ▶ START SESSION
-            </button>
-            <button onClick={() => setActive(false)} disabled={!active} className="btn-primary"
-              style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "12px 20px", borderRadius: 8, cursor: active ? "pointer" : "not-allowed", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13 }}>
-              ⏸ Pause Stream
-            </button>
-            <button onClick={markLap} disabled={!active} className="btn-primary"
-              style={{ background: "transparent", border: `1px solid ${C.amber}`, color: C.amber, padding: "12px 20px", borderRadius: 8, cursor: active ? "pointer" : "not-allowed", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13 }}>
-              ⚑ Mark Lap
-            </button>
-            <button onClick={() => { setActive(false); setLapNum(1); setLapTime(0); setSessionTime(0); setPos(0); setSessionLaps([]); }} className="btn-primary"
-              style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted, padding: "12px 20px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 500, fontSize: 13 }}>
-              ↺ Reset
-            </button>
             <button onClick={() => navigate("history")} className="btn-primary"
               style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "12px 20px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 500, fontSize: 13, marginLeft: "auto" }}>
               Lap History →
@@ -147,10 +104,11 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
               </div>
               {sessionLaps.map((lap, i) => (
                 <div key={i} style={{ padding: "12px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16 }}>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, width: 40 }}>LAP {lap.num}</span>
-                  <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.text, flex: 1 }}>{fmtTime(lap.time)}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, width: 40 }}>LAP {lap.lap_id}</span>
+                  <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.text, flex: 1 }}>{fmtTime(lap.lap_time_s)}</span>
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: lap.gap_s > 0 ? C.red : C.teal }}>{lap.gap_s > 0 ? "+" : ""}{lap.gap_s.toFixed(3)}s</span>
                   <Pill color="muted">completed</Pill>
-                  <button onClick={() => navigate("analysis", { demo: true })} className="btn-red-accent" style={{ padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600 }}>View Analysis</button>
+                  <button onClick={() => navigate("analysis", { lap_id: lap.lap_id })} className="btn-red-accent" style={{ padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 12, fontWeight: 600 }}>View Analysis</button>
                 </div>
               ))}
             </div>
@@ -164,21 +122,17 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
               <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.teal, letterSpacing: "0.05em" }}>LIVE COACH</span>
             </div>
             <div style={{ padding: 20 }}>
-              {active ? (
-                <div style={{ background: "rgba(15,248,192,0.06)", border: `1px solid rgba(15,248,192,0.2)`, borderRadius: 10, padding: "16px", marginBottom: 12 }} className="fade-in" key={coachMsg}>
-                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{coachMsg}</div>
+              {live.coaching ? (
+                <div style={{ background: "rgba(15,248,192,0.06)", border: `1px solid rgba(15,248,192,0.2)`, borderRadius: 10, padding: "16px", marginBottom: 12 }} className="fade-in" key={live.coaching}>
+                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{live.coaching}</div>
                 </div>
               ) : (
                 <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>
-                  Start a session to receive live coaching prompts.
+                  {live.connected
+                    ? "Waiting for coaching data from recorder..."
+                    : "Connect your recorder to receive live coaching prompts."}
                 </div>
               )}
-              {active && LIVE_COACH_MSGS.slice(0, 3).map((msg, i) => (
-                <div key={i} style={{ padding: "8px 0", borderBottom: i < 2 ? `1px solid ${C.border}` : "none", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <span style={{ color: C.muted, fontSize: 12, marginTop: 1 }}>◦</span>
-                  <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{msg}</span>
-                </div>
-              ))}
             </div>
           </div>
 
@@ -187,8 +141,8 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
             {([
               ["LAP NUMBER", `LAP ${lapNum}`, C.text],
               ["CURRENT TIME", fmtTime(lapTime), C.teal],
-              ["LIVE DELTA", delta > 0 ? `+${delta}s` : `${delta}s`, delta < 0 ? C.teal : C.red],
-              ["SESSION TIME", fmtTime(sessionTime), C.text],
+              ["LIVE DELTA", delta > 0 ? `+${delta.toFixed(3)}s` : `${delta.toFixed(3)}s`, delta < 0 ? C.teal : C.red],
+              ["CONNECTION", live.connected ? "CONNECTED" : "OFFLINE", live.connected ? C.teal : C.red],
             ] as const).map(([label, value, color]) => (
               <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.08em" }}>{label}</span>

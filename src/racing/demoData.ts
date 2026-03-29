@@ -28,6 +28,7 @@ export const DEMO_COACHING = {
     { sector:"Sector 3", time_delta_s:-2.831, headline:"Solid sector — 2.831s ahead of reference. Corner speed 21.3 km/h above reference.", has_issues:false },
   ],
   positive_observations: ["Sector 2: 2.000s ahead of reference.", "Sector 3: 2.831s ahead of reference.", "Turn 3: carrying 21.3 km/h more than reference at the apex."],
+  corner_coaching: [] as { corner: string; corner_type: string; dist_m: number; time_delta_s: number; technique_issue: string; fix: string; data_evidence: string; time_gain_s: number }[],
 };
 
 export const DEMO_LAPS = [
