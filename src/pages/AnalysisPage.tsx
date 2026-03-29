@@ -7,7 +7,7 @@ import { C } from "../racing/tokens";
 import { fmtTime, fmtDelta } from "../racing/formatters";
 import { BackBtn, Badge } from "../racing/SharedUI";
 import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
-import TrackMap from "../racing/TrackMap";
+import BoundaryTrackMap from "../racing/BoundaryTrackMap";
 import { sampleAnalysis, sampleCoaching } from "../data/sampleAnalysis";
 import { fetchDemoLapAnalysis, fetchDemoLapCoaching, type LapAnalysis, type CoachingReport } from "../services/api";
 
@@ -74,10 +74,11 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         throttle: Math.round((uploadedTelemetry.throttle[i] || 0) * 100),
         brake: Math.round((uploadedTelemetry.brake[i] || 0) * 100),
         steering: Math.round((uploadedTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+        worldX: uploadedTelemetry.car_x?.[i] ?? uploadedTelemetry.x?.[i] ?? 0,
+        worldY: uploadedTelemetry.car_z?.[i] ?? uploadedTelemetry.y?.[i] ?? 0,
       }))
     : isDemo && demoTelem
     ? demoTelem.comp.dist_m.map((d: number, i: number) => {
-        // Find closest ref point by distance
         const refIdx = demoTelem.ref.dist_m.findIndex((rd: number) => rd >= d);
         const ri = refIdx >= 0 ? refIdx : demoTelem.ref.dist_m.length - 1;
         return {
@@ -90,6 +91,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
           refThrottle: Math.round((demoTelem.ref.throttle[ri] || 0) * 100),
           refBrake: Math.round((demoTelem.ref.brake[ri] || 0) * 100),
           refSteering: Math.round((demoTelem.ref.steering[ri] || 0) * (180 / Math.PI)),
+          worldX: demoTelem.comp.x?.[i] ?? 0,
+          worldY: demoTelem.comp.y?.[i] ?? 0,
         };
       })
     : apiTelemetry ? apiTelemetry.dist_m.map((d: number, i: number) => ({
@@ -99,6 +102,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
         brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
         steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+        worldX: apiTelemetry.x?.[i] ?? 0,
+        worldY: apiTelemetry.y?.[i] ?? 0,
       })) : [];
 
   if (!isDemo && !isUploaded && (loadingAnalysis || loadingCoaching)) {
@@ -202,49 +207,57 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
           ))}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20, marginBottom: 20 }}>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h2 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.text }}>Track Map · Sector Overview</h2>
-              <div style={{ display: "flex", gap: 12 }}>
-                {([["S1", C.red], ["S2", C.amber], ["S3", C.teal]] as const).map(([s, c]) => (
-                  <div key={s} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 10, height: 3, background: c, borderRadius: 1 }} />
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted }}>{s}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <TrackMap
-                width={460}
-                height={300}
-                selectedCornerId={activeCorner}
-                onSelectCorner={(id) => setActiveCorner(activeCorner === id ? null : id)}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "center", flexWrap: "wrap" }}>
-              {analysis.corners.map(c => (
-                <button key={c.corner_id} onClick={() => setActiveCorner(activeCorner === c.corner_id ? null : c.corner_id)}
-                  style={{ background: activeCorner === c.corner_id ? C.tealBg : "transparent", border: `1px solid ${activeCorner === c.corner_id ? C.teal : C.border2}`, color: activeCorner === c.corner_id ? C.teal : C.muted2, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 600, transition: "all 0.15s" }}>
-                  {c.corner_name}
-                </button>
+        {/* Track Map — full width */}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h2 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.text }}>Track Map · Delta Overlay</h2>
+            <div style={{ display: "flex", gap: 16 }}>
+              {([["Faster", C.teal], ["Neutral", C.muted2], ["Slower", C.red]] as const).map(([label, color]) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <div style={{ width: 14, height: 3, background: color, borderRadius: 1 }} />
+                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted }}>{label}</span>
+                </div>
               ))}
             </div>
           </div>
+          <BoundaryTrackMap
+            trackX={telemData.map((d: any) => d.worldX ?? 0)}
+            trackY={telemData.map((d: any) => d.worldY ?? 0)}
+            trackDelta={telemData.map((d: any) => (d.refSpeed || 0) - (d.compSpeed || 0))}
+            corners={(analysis.corners || []).map((c: any) => ({
+              name: c.corner_name,
+              dist_m: c.dist_m,
+              delta: c.time_delta_s || 0,
+              corner_id: c.corner_id,
+            }))}
+            selectedCornerId={activeCorner}
+            onSelectCorner={(id) => setActiveCorner(activeCorner === id ? null : id)}
+            lapDist={analysis.lap_dist_m}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "center", flexWrap: "wrap" }}>
+            {analysis.corners.map((c: any) => (
+              <button key={c.corner_id} onClick={() => setActiveCorner(activeCorner === c.corner_id ? null : c.corner_id)}
+                style={{ background: activeCorner === c.corner_id ? C.tealBg : "transparent", border: `1px solid ${activeCorner === c.corner_id ? C.teal : C.border2}`, color: activeCorner === c.corner_id ? C.teal : C.muted2, padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 600, transition: "all 0.15s" }}>
+                {c.corner_name}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <div style={{ background: C.card, border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, background: "linear-gradient(135deg, rgba(15,248,192,0.07), transparent)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.teal }} />
-                <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.teal, letterSpacing: "0.05em" }}>AI COACHING INSIGHTS</span>
-              </div>
+        {/* AI Coaching Insights — full width, below map */}
+        <div style={{ background: C.card, border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 16, overflow: "hidden", marginBottom: 20 }}>
+          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, background: "linear-gradient(135deg, rgba(15,248,192,0.07), transparent)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.teal }} />
+              <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.teal, letterSpacing: "0.05em" }}>AI COACHING INSIGHTS</span>
             </div>
-            <div style={{ padding: 20, flex: 1, overflowY: "auto" }}>
-              <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, marginBottom: 20 }}>{coaching.overall_summary}</p>
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>PRIORITY ACTIONS</div>
-              {(coaching.priority_actions || []).map((action, i) => (
-                <div key={i} style={{ background: "rgba(15,248,192,0.04)", border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 10, padding: "14px", marginBottom: 10 }}>
+          </div>
+          <div style={{ padding: 20 }}>
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, marginBottom: 20 }}>{coaching.overall_summary}</p>
+            <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>PRIORITY ACTIONS</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 12 }}>
+              {(coaching.priority_actions || []).map((action: any, i: number) => (
+                <div key={i} style={{ background: "rgba(15,248,192,0.04)", border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 10, padding: "14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, color: C.text }}>{action.location}</span>
                     <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.teal }}>+{action.time_gain_s.toFixed(3)}s</span>
@@ -253,18 +266,18 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
                   <p style={{ fontSize: 12, color: C.teal, lineHeight: 1.5, fontStyle: "italic" }}>{action.instruction}</p>
                 </div>
               ))}
-              {(coaching.positive_observations || []).length > 0 && (
-                <>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", margin: "16px 0 10px" }}>POSITIVE NOTES</div>
-                  {coaching.positive_observations.map((obs, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
-                      <span style={{ color: C.teal, fontSize: 12, marginTop: 1 }}>✓</span>
-                      <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{obs}</span>
-                    </div>
-                  ))}
-                </>
-              )}
             </div>
+            {(coaching.positive_observations || []).length > 0 && (
+              <>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", margin: "16px 0 10px" }}>POSITIVE NOTES</div>
+                {coaching.positive_observations.map((obs: string, i: number) => (
+                  <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
+                    <span style={{ color: C.teal, fontSize: 12, marginTop: 1 }}>✓</span>
+                    <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{obs}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
 
