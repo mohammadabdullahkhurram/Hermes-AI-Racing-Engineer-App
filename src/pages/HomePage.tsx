@@ -15,7 +15,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
     if (!rect) return;
     const cx = (e.clientX - rect.left) / rect.width - 0.5;
     const cy = (e.clientY - rect.top) / rect.height - 0.5;
-    setGridOffset({ x: cx * 18, y: cy * 14 });
+    setGridOffset({ x: cx * 45, y: cy * 35 });
   }, []);
 
   const handleMouseLeave = useCallback(() => {
