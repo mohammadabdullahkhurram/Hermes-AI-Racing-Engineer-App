@@ -1,61 +1,123 @@
 
-What I verified:
-- The `backend/` folder does exist in the current repository root.
-- It contains:
-  - `backend/server.py`
-  - `backend/ac_recorder.py`
-  - `backend/ac_recorder-2.py`
-  - `backend/requirements.txt`
-  - `backend/src/analyzer.py`
-  - `backend/src/coach.py`
-  - `backend/src/dashboard.py`
-  - `backend/src/extractor.py`
-  - `backend/src/normalize.py`
-  - `backend/src/race_analyzer.py`
-- The frontend is also already wired to backend-related files:
-  - `src/services/api.ts`
-  - `src/hooks/useLiveTelemetry.ts`
-  - `src/hooks/useApiData.ts`
-  - pages like `LiveModePage.tsx`, `HomePage.tsx`, `LapHistoryPage.tsx`, `AnalysisPage.tsx` import and use them
-- Demo data references are gone; searching for `demoData` returns no matches.
 
-Why you may not see it in the code library:
-- The screenshot shows the code panel search returning “No results for ‘backend’”. That usually means the editor search is filtering by file content/name results rather than showing the folder tree directly.
-- Since this project is still a frontend Vite app, the `backend/` folder is just stored in the repo; it is not part of the preview runtime, so Lovable’s preview won’t run those Python files.
-- `README.md` is still basically empty, so there is no visible documentation in the project telling you that a Python backend was added.
+## Plan: Real Track Map, Output Folder Structure, and Live Coaching
 
-Concise plan to fix the visibility confusion:
-1. Surface the backend clearly in the repo
-   - Add documentation in `README.md` describing the `backend/` folder and what each file does.
-   - Add a small project-structure section listing the backend files explicitly.
+### Summary
+Three major changes: (1) Replace the placeholder SVG circuit with the real `map.png` + `map.ini` coordinate mapping on the Live page, (2) structure `public/data/output/` to mirror the backend's `output/` folder with demo JSONs and a `laps/` subfolder, and (3) enhance live coaching to show continuous real-time prompts during driving.
 
-2. Make the backend discoverable from the frontend code
-   - Add a simple “Backend setup” or “Local backend required” note in the app UI, likely on Home or Upload page.
-   - Include the expected backend URL (`VITE_BACKEND_URL`, default `http://localhost:8080`) and mention that Python files live in `/backend`.
+---
 
-3. Reconcile your latest uploaded Python versions
-   - Compare your newly uploaded `ac_recorder-3.py`, `analyzer-2.py`, `coach-2.py`, `dashboard-2.py`, `extractor-2.py`, `normalize-2.py`, `race_analyzer-2.py` against the current `backend/` copies.
-   - Replace any outdated files so the repository matches your latest local backend exactly.
+### 1. Add Real Track Map Assets
 
-4. Verify backend/frontend contract
-   - Confirm `backend/server.py` still exposes the endpoints the frontend now depends on:
-     - `/laps_json`
-     - `/api/laps/:id/analysis`
-     - `/api/laps/:id/coaching`
-     - `/api/laps/:id/telemetry`
-     - `/api/live/state`
-     - `/api/driver/stats`
-   - If your latest uploaded Python files changed schemas, update the frontend types accordingly.
+**Files:**
+- Copy `map.png` → `public/images/yas_marina_map.png`
+- Create `src/racing/mapConfig.ts` — export the map.ini parameters as constants:
+  ```
+  WIDTH: 1266.29, HEIGHT: 608.393, MARGIN: 20,
+  SCALE_FACTOR: 1, X_OFFSET: 415.172, Z_OFFSET: 333.286, DRAWING_SIZE: 10
+  ```
+- Include a `worldToPixel(x, z)` function that converts AC world coordinates to pixel position on the map image using:
+  ```
+  px = (x + X_OFFSET) * SCALE_FACTOR + MARGIN
+  py = (z + Z_OFFSET) * SCALE_FACTOR + MARGIN
+  ```
 
-5. Optional cleanup
-   - Remove duplicate recorder versions if only one should remain (`ac_recorder.py` vs `ac_recorder-2.py`).
-   - Rename files consistently so the repo mirrors your actual local setup.
+### 2. Replace TrackMap on Live Page with Real Map
 
-Technical notes:
-- I confirmed `backend/` is not ignored by `.gitignore`.
-- I confirmed `backend/requirements.txt` exists.
-- I confirmed the current frontend imports backend hooks/services and is expecting a running backend.
-- So this is not a “plan not implemented” problem anymore; it is a repo visibility/editor discoverability problem plus possible version mismatch with your newly uploaded Python files.
+**File: `src/racing/RealTrackMap.tsx`** (new component)
+- Renders `map.png` as a background image inside a container
+- Scales to fit the UI while preserving aspect ratio
+- Uses `worldToPixel()` to place the live driver dot (from `live.x`, `live.y`)
+- Draws driven path as an SVG polyline overlay, accumulated from position history
+- Glowing teal dot for current position, fading trail for path history
 
-Recommended next implementation step:
-- Update the repo so your newest uploaded backend files fully replace the current `backend/` copies and add explicit README/setup docs so the backend is unmistakably visible.
+**File: `src/pages/LiveModePage.tsx`** (edit)
+- Replace `<TrackMap>` import with `<RealTrackMap>`
+- Pass `x={live.x}`, `y={live.y}` (raw world coords) instead of `position` (0-1 fraction)
+- Maintain a `pathHistory` state array, appending `{x, y}` on each poll tick
+- Clear path history when lap number changes
+- Remove the old percentage-based "LAP PROGRESS" bar, replace with map-based visualization
+
+### 3. Restructure Output Data in `public/data/`
+
+**New folder structure:**
+```text
+public/data/output/
+├── analysis.json        (demo — already have as sampleAnalysis.ts)
+├── coaching.json        (demo — already embedded)
+├── race_analysis.json   (already exists in public/data/)
+├── race_laps.json       (need to store)
+├── fast_laps.json       (reference lap — need to store)
+└── laps/
+    └── lap_1/
+        ├── lap.csv          (placeholder/sample)
+        ├── analysis.json    (copy of demo analysis)
+        └── coaching.json    (copy of demo coaching)
+```
+
+- Move `public/data/race_analysis.json` → `public/data/output/race_analysis.json`
+- Create `public/data/output/laps/lap_1/analysis.json` and `coaching.json` using the demo data
+- Create a small placeholder `lap.csv` with a few sample rows
+- Update `sampleAnalysis.ts` imports if paths change
+
+### 4. Dual Data Source Support
+
+**File: `src/services/api.ts`** (edit)
+- Add `fetchDemoLaps()` that returns a hardcoded lap entry list from `public/data/output/laps/`
+- Add `fetchDemoLapAnalysis(lapId)` / `fetchDemoLapCoaching(lapId)` that fetch from `/data/output/laps/lap_{id}/analysis.json`
+
+**File: `src/pages/LapHistoryPage.tsx`** (edit)
+- When backend is offline (`isError`), fall back to loading demo laps from `public/data/output/laps/` so the page is not empty
+- Show a badge indicating "DEMO DATA" vs "LIVE DATA"
+
+**File: `src/pages/AnalysisPage.tsx`** (edit)
+- Already handles `demo: true` — keep that for the "View Example Analysis" button
+- For lap history entries, continue using API calls to backend (which reads from `output/laps/lap_<id>/`)
+
+### 5. Enhanced Live Coaching
+
+**File: `src/hooks/useLiveTelemetry.ts`** (edit)
+- Extend `LiveState` to include `coaching_history: string[]` (recent coaching messages)
+- Track last N coaching messages to show a scrolling feed, not just the latest single message
+
+**File: `src/pages/LiveModePage.tsx`** (edit)
+- Replace the single coaching bubble with a scrollable coaching feed panel
+- Show the latest coaching message prominently at top, with older messages below (faded)
+- Each coaching message gets a timestamp or lap-position context
+- When `live.coaching` changes (new value from backend), animate it in
+- Add coaching categories with icons: braking (🔴), throttle (🟢), corner prep (🟡), speed (⚡), delta (+/-)
+- Parse coaching text for keywords to assign category/color automatically
+
+The backend already pushes coaching via `ac_recorder.py` through the `/api/live/telemetry` POST endpoint — the `coaching` field already exists in `live_state`. This plan just improves how the frontend displays it: from a single static bubble to a continuous, active feed.
+
+### 6. Update `LiveState` Interface
+
+**File: `src/services/api.ts`** (edit)
+- Keep existing `LiveState` fields, no schema changes needed (coaching is already `string | null`)
+
+---
+
+### Technical Notes
+- `map.png` is 1440×900px with a black background — fits the dark theme perfectly
+- The map.ini coordinate formula matches what `ac_recorder.py` uses to plot the car on the map
+- The `x` and `y` values from `/api/live/state` are raw AC world coordinates — the frontend must apply the offset/scale conversion
+- Path history should cap at ~2000 points to avoid memory growth during long sessions
+- The `TrackMap.tsx` SVG component is kept for use on HomePage and AnalysisPage (decorative); only the Live page switches to the real map
+
+### Files Created/Modified
+| File | Action |
+|------|--------|
+| `public/images/yas_marina_map.png` | Copy from upload |
+| `src/racing/mapConfig.ts` | New — map.ini params + worldToPixel |
+| `src/racing/RealTrackMap.tsx` | New — real map component with position overlay |
+| `src/pages/LiveModePage.tsx` | Edit — use RealTrackMap, path history, coaching feed |
+| `src/hooks/useLiveTelemetry.ts` | Edit — track coaching history |
+| `public/data/output/analysis.json` | New — demo file |
+| `public/data/output/coaching.json` | New — demo file |
+| `public/data/output/race_analysis.json` | Move from public/data/ |
+| `public/data/output/laps/lap_1/analysis.json` | New — sample lap |
+| `public/data/output/laps/lap_1/coaching.json` | New — sample lap |
+| `public/data/output/laps/lap_1/lap.csv` | New — placeholder CSV |
+| `src/pages/LapHistoryPage.tsx` | Edit — demo fallback |
+| `src/services/api.ts` | Edit — demo fetch helpers |
+
