@@ -2,7 +2,6 @@ import React, { useState, useRef } from "react";
 import { C } from "../racing/tokens";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
 
-
 interface UploadLapPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
 }
@@ -12,6 +11,7 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"idle" | "analyzing" | "done" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [progress, setProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -25,20 +25,67 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
     if (!file) return;
     setStatus("analyzing");
     setErrorMsg("");
+    setProgress(0);
+
     try {
-      const base = import.meta.env.VITE_SUPABASE_URL || "";
+      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+      if (!projectId || !anonKey) {
+        throw new Error("Missing backend configuration (VITE_SUPABASE_PROJECT_ID or VITE_SUPABASE_PUBLISHABLE_KEY)");
+      }
+
+      const url = `https://${projectId}.supabase.co/functions/v1/upload-lap`;
+
+      setProgress(1);
+
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch(`${base}/upload`, { method: "POST", body: formData });
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey": anonKey,
+        },
+        body: formData,
+      });
+
+      setProgress(2);
+
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed");
+
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
+      }
+
+      setProgress(3);
       setStatus("done");
-      setTimeout(() => navigate("analysis", { lap_id: data.lap_id }), 800);
+
+      // Navigate to analysis with the uploaded results
+      setTimeout(() => {
+        navigate("analysis", {
+          uploadedAnalysis: data.analysis,
+          uploadedCoaching: data.coaching,
+          uploadedTelemetry: data.telemetry,
+          uploaded: true,
+        });
+      }, 600);
     } catch (err: any) {
       setStatus("error");
-      setErrorMsg(err.message || "Could not reach backend. Is server.py running?");
+      if (err.message === "Failed to fetch") {
+        setErrorMsg("Cannot reach the backend. Check your network connection or try again.");
+      } else {
+        setErrorMsg(err.message || "Unknown error");
+      }
     }
   };
+
+  const progressSteps = [
+    "Uploading CSV file...",
+    "Parsing telemetry channels...",
+    "Generating lap analysis...",
+  ];
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, paddingBottom: 80 }}>
@@ -77,8 +124,8 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px", marginBottom: 24, display: "flex", gap: 12, alignItems: "flex-start" }}>
           <span style={{ color: C.amber, fontSize: 16, marginTop: 1 }}>ⓘ</span>
           <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
-            <strong style={{ color: C.muted2 }}>CSV format:</strong> Export from SimHub with fields: SpeedKmh, Throttle, Brake, Steering, Gear, Rpms, LapTimeCurrent, TrackPositionPercent, CarCoordX/Z.
-            <br /><strong style={{ color: C.muted2 }}>MCAP format:</strong> Directly from the AC recorder pipeline output.
+            <strong style={{ color: C.muted2 }}>Recorder CSV:</strong> Fields: LapTimeCurrent, SpeedKmh, Throttle, Brake, Steering, Gear, Rpms, CarCoordX, CarCoordZ, etc.
+            <br /><strong style={{ color: C.muted2 }}>SimHub CSV:</strong> SpeedKmh, Throttle, Brake, Steering, Gear, Rpms, TrackPositionPercent, CarCoordX/Z.
           </div>
         </div>
 
@@ -95,10 +142,17 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
 
         {status === "analyzing" && (
           <div style={{ marginTop: 24, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20 }}>
-            {["Reading telemetry channels...", "Computing sector splits...", "Generating coaching report..."].map((step, i) => (
+            {progressSteps.map((step, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0" }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} className="live-dot" />
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: C.muted2 }}>{step}</span>
+                <div style={{
+                  width: 6, height: 6, borderRadius: "50%",
+                  background: i <= progress ? C.teal : C.border,
+                  opacity: i <= progress ? 1 : 0.4,
+                }} className={i === progress ? "live-dot" : undefined} />
+                <span style={{
+                  fontFamily: "'JetBrains Mono',monospace", fontSize: 12,
+                  color: i <= progress ? C.muted2 : C.muted,
+                }}>{step}</span>
               </div>
             ))}
           </div>

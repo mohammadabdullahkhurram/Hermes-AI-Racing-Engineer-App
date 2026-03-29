@@ -21,14 +21,21 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
   const [activeCorner, setActiveCorner] = useState<string | null>(null);
 
   const isDemo = context.demo === true;
+  const isUploaded = context.uploaded === true;
   const lapId = (context.lap_id as number) || null;
 
   // For demo laps from output/laps/ folder (e.g. navigated from Lap History with demo flag)
   const isDemoLap = isDemo && lapId !== null;
 
-  const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(isDemoLap ? null : lapId);
-  const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(isDemoLap ? null : lapId);
-  const { data: apiTelemetry } = useLapTelemetry(isDemoLap ? null : lapId);
+  // Uploaded data passed directly from upload page
+  const uploadedAnalysis = (context.uploadedAnalysis as LapAnalysis) || null;
+  const uploadedCoaching = (context.uploadedCoaching as CoachingReport) || null;
+  const uploadedTelemetry = (context.uploadedTelemetry as any) || null;
+
+  const skipApi = isDemo || isDemoLap || isUploaded;
+  const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(skipApi ? null : lapId);
+  const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(skipApi ? null : lapId);
+  const { data: apiTelemetry } = useLapTelemetry(skipApi ? null : lapId);
 
   // Load demo lap data from output/laps/ folder
   const [demoLapAnalysis, setDemoLapAnalysis] = useState<LapAnalysis | null>(null);
@@ -49,10 +56,26 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
       .catch(() => {});
   }, [isDemo]);
 
-  const analysis = isDemoLap ? (demoLapAnalysis || sampleAnalysis) : isDemo ? sampleAnalysis : (apiAnalysis || null);
-  const coaching = isDemoLap ? (demoLapCoaching || sampleCoaching) : isDemo ? sampleCoaching : (apiCoaching || null);
+  const analysis = isUploaded ? uploadedAnalysis
+    : isDemoLap ? (demoLapAnalysis || sampleAnalysis)
+    : isDemo ? sampleAnalysis
+    : (apiAnalysis || null);
 
-  const telemData = isDemo && demoTelem
+  const coaching = isUploaded ? uploadedCoaching
+    : isDemoLap ? (demoLapCoaching || sampleCoaching)
+    : isDemo ? sampleCoaching
+    : (apiCoaching || null);
+
+  const telemData = isUploaded && uploadedTelemetry
+    ? uploadedTelemetry.dist_m.map((d: number, i: number) => ({
+        dist: d,
+        refSpeed: 0,
+        compSpeed: Math.round(uploadedTelemetry.speed_kmh[i] || 0),
+        throttle: Math.round((uploadedTelemetry.throttle[i] || 0) * 100),
+        brake: Math.round((uploadedTelemetry.brake[i] || 0) * 100),
+        steering: Math.round((uploadedTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+      }))
+    : isDemo && demoTelem
     ? demoTelem.comp.dist_m.map((d: number, i: number) => {
         // Find closest ref point by distance
         const refIdx = demoTelem.ref.dist_m.findIndex((rd: number) => rd >= d);
@@ -78,7 +101,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
       })) : [];
 
-  if (!isDemo && (loadingAnalysis || loadingCoaching)) {
+  if (!isDemo && !isUploaded && (loadingAnalysis || loadingCoaching)) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⏳</div>
