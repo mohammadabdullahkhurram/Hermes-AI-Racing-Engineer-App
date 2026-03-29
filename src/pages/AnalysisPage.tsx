@@ -36,13 +36,41 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
     steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
   })) : [];
 
+  if (loadingAnalysis || loadingCoaching) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⏳</div>
+        <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 24, fontWeight: 700, color: C.muted2 }}>Loading Analysis...</div>
+      </div>
+    );
+  }
+
+  if (!analysis || !coaching) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, paddingBottom: 80 }}>
+        <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 32px", textAlign: "center", paddingTop: 120 }}>
+          <BackBtn onClick={() => navigate("history")} />
+          <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3, marginTop: 32 }}>📊</div>
+          <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 28, fontWeight: 700, color: C.muted2, marginBottom: 8 }}>No Analysis Available</div>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 24 }}>
+            {lapId ? `No analysis data found for Lap ${lapId}.` : "Select a lap from Lap History to view its analysis."}
+            <br />Make sure your backend is running and the lap has been processed.
+          </div>
+          <button onClick={() => navigate("history")} className="btn-primary" style={{ background: C.tealBg, border: `1px solid rgba(15,248,192,0.3)`, color: C.teal, padding: "12px 24px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>
+            ← Go to Lap History
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const summaryCards = [
     { label: "Lap Time", value: fmtTime(analysis.comp_lap_time_s), color: C.text, sub: analysis.comp_label || "your lap" },
     { label: "Delta to Ref", value: fmtDelta(analysis.total_time_delta_s), color: C.red, sub: `vs ${analysis.ref_label || "reference"}` },
-    { label: "Best Sector", value: analysis.sectors.reduce((best, s) => s.time_delta_s < (best?.time_delta_s ?? Infinity) ? s : best, analysis.sectors[0])?.sector_name || "—", color: C.teal, sub: "least time lost" },
-    { label: "Worst Sector", value: analysis.sectors.reduce((worst, s) => s.time_delta_s > (worst?.time_delta_s ?? -Infinity) ? s : worst, analysis.sectors[0])?.sector_name || "—", color: C.red, sub: "most time lost" },
+    { label: "Best Sector", value: analysis.sectors.reduce((best: any, s: any) => s.time_delta_s < (best?.time_delta_s ?? Infinity) ? s : best, analysis.sectors[0])?.sector_name || "—", color: C.teal, sub: "least time lost" },
+    { label: "Worst Sector", value: analysis.sectors.reduce((worst: any, s: any) => s.time_delta_s > (worst?.time_delta_s ?? -Infinity) ? s : worst, analysis.sectors[0])?.sector_name || "—", color: C.red, sub: "most time lost" },
     { label: "Corners", value: `${analysis.corners?.length || 0}`, color: C.amber, sub: "analyzed" },
-    { label: "Potential Gain", value: `${((coaching.priority_actions || []).reduce((sum, a) => sum + a.time_gain_s, 0)).toFixed(3)}s`, color: C.teal, sub: "identified" },
+    { label: "Potential Gain", value: `${((coaching.priority_actions || []).reduce((sum: number, a: any) => sum + a.time_gain_s, 0)).toFixed(3)}s`, color: C.teal, sub: "identified" },
   ];
 
   const tabs = ["speed", "throttle", "brake", "steering", "sectors"];
@@ -54,7 +82,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
     steering: { key1: "steering", key2: "steering", color1: C.blue, color2: C.purple, label1: "Steering °", label2: "", unit: "°", domain: [-200, 200] },
   };
 
-  const selectedCornerData = activeCorner ? analysis.corners.find(c => c.corner_id === activeCorner) : null;
+  const selectedCornerData = activeCorner ? analysis.corners.find((c: any) => c.corner_id === activeCorner) : null;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, paddingBottom: 80 }}>
