@@ -101,7 +101,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
       })) : [];
 
-  if (!isDemo && (loadingAnalysis || loadingCoaching)) {
+  if (!isDemo && !isUploaded && (loadingAnalysis || loadingCoaching)) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⏳</div>
