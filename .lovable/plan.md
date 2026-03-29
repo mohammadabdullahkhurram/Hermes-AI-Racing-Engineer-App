@@ -1,51 +1,68 @@
 
 
-## Plan: Fix Track Map Alignment
+## Plan: Cloud-Deployed Frontend + Windows PC Backend
 
-### Problem
-The car position and trajectory don't align with the map image because of two mismatches:
+### The Reality
 
-1. **Coordinate mismatch**: The Python recorder's `world_to_pixel()` does NOT add margin to pixel coordinates, but the Lovable `mapConfig.ts` formula adds a 20px margin. The SVG viewBox is set to `1306x648` (image dimensions with margins baked in), but the pixel values from the backend are relative to the track area only (no margins).
+The recorder (`ac_recorder.py`) **must** run on your Windows gaming PC — it reads Assetto Corsa's shared memory (`mmap` + `ctypes`), which is a Windows-only, local-process API. There is no way around this.
 
-2. **Scaling approach**: The working Python HTML uses the image's **natural dimensions** (`trackImg.naturalWidth/Height`) as the scaling base and maps coordinates with `canvasWidth / naturalWidth`. The Lovable app uses hardcoded `IMG_WIDTH/IMG_HEIGHT` constants that may not match the actual image.
+The analysis pipeline (`analyzer.py`, `coach.py`, etc.) is Python code that cannot run in Lovable's edge functions (Deno/TypeScript only).
 
-3. **Path format**: The Python recorder sends path as arrays `[[px, py], ...]` but the Lovable component expects `{ px, py }[]` objects. Need to handle both.
+### What We Can Do
 
-### Solution
-Adopt the same approach as the working Python HTML — use a canvas overlay that scales coordinates based on the actual image natural dimensions, matching exactly how the recorder calculates them.
-
-### Changes
-
-**`src/racing/mapConfig.ts`**
-- Remove the margin-adding `worldToPixel` function (backend already sends pixel coords)
-- Keep config values for reference but stop using `IMG_WIDTH/IMG_HEIGHT` for the SVG viewBox
-
-**`src/racing/RealTrackMap.tsx`**
-- Switch from SVG overlay to a **Canvas overlay** matching the Python HTML's `drawLiveOverlay()` approach
-- Use a `ref` to the `<img>` element, read `naturalWidth`/`naturalHeight` after load
-- Resize canvas to match the image's rendered size
-- Scale coordinates: `sx = canvasWidth / naturalWidth`, `sy = canvasHeight / naturalHeight`
-- Draw path as a polyline using `path[i].px * sx, path[i].py * sy` (handle both array and object formats)
-- Draw car as a filled rectangle rotated by `heading_rad` (matching the Python version's car shape rendering)
-- Redraw on window resize
-
-**`src/hooks/useLiveTelemetry.ts`** (if needed)
-- Normalize path data: if backend sends `[[x,y],...]` arrays, convert to `{px, py}[]`
-
-### Technical Detail
-The Python recorder computes:
-```python
-px = (x + x_offset) / scale_factor   # no margin
-py = (z + z_offset) / scale_factor   # no margin
+```text
+Windows Gaming PC                          Cloud (Lovable)
+┌─────────────────────┐                   ┌──────────────┐
+│  Assetto Corsa      │                   │  Frontend    │
+│  ac_recorder.py     │                   │  (deployed)  │
+│  server.py          │◄── ngrok tunnel ──│  polls API   │
+│  analysis pipeline  │                   └──────────────┘
+│  stores laps/CSVs   │
+└─────────────────────┘
 ```
 
-The working HTML scales these by:
-```js
-sx = canvasRenderedWidth / image.naturalWidth
-sy = canvasRenderedHeight / image.naturalHeight
-drawX = pixel_x * sx
-drawY = pixel_y * sy
-```
+**Step 1: Publish the frontend** — click Publish in Lovable. You get a public URL like `yourapp.lovable.app`.
 
-This is the exact approach we will replicate in the React component using a canvas ref and `useEffect` for drawing.
+**Step 2: Run everything on Windows PC** — both `server.py` and `ac_recorder.py` run on the same machine. The recorder sends to `localhost:8080` (no Mac IP needed).
+
+**Step 3: Expose with ngrok** — on your Windows PC, run:
+```
+ngrok http 8080
+```
+This gives you a public URL like `https://abc123.ngrok-free.app` that tunnels to your local Flask server.
+
+**Step 4: Enter the ngrok URL in the frontend** — the app already has a backend URL setting. Paste the ngrok URL there.
+
+### Code Changes Required
+
+1. **`backend/src/ac_recorder.py`** — Remove the "Enter Mac IP" prompt. Default `SERVER_URL` to `http://localhost:8080`. Rename `send_to_mac()` → `send_to_server()`. Remove all Mac references.
+
+2. **`backend/server.py`** — Update comments from "Run on Mac" to "Run on Windows PC". Ensure `host="0.0.0.0"`.
+
+3. **`src/services/api.ts`** — Add runtime backend URL override via `localStorage` so you can set it from the UI without rebuilding.
+
+4. **`src/pages/LiveModePage.tsx`** — Add a small "Backend URL" input field (in a settings drawer or at the top) so you can paste your ngrok URL directly in the deployed app.
+
+### How Testing Will Work
+
+1. On Windows PC, open two command prompts:
+   - `python server.py` (Flask backend on port 8080)
+   - `python src/ac_recorder.py` (recorder, connects to localhost:8080)
+2. Run `ngrok http 8080` in a third terminal
+3. Open the published Lovable app on any device (phone, tablet, another PC)
+4. Paste the ngrok URL into the backend settings
+5. Start Assetto Corsa → drive → live telemetry and coaching stream to the cloud frontend
+6. After each lap, analysis runs on the Windows PC and results are accessible from the frontend
+
+### Alternative: No Tunnel Needed (Same Network)
+
+If you open the published frontend on a browser **on the same Windows PC**, you can just use `http://localhost:8080` as the backend URL — no ngrok needed. The deployed frontend runs in your browser, which can reach localhost.
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `backend/src/ac_recorder.py` | Remove Mac IP prompt, default to localhost, rename functions |
+| `backend/server.py` | Update comments, ensure `0.0.0.0` binding |
+| `src/services/api.ts` | Add localStorage-based backend URL override |
+| `src/pages/LiveModePage.tsx` | Add backend URL settings input |
 

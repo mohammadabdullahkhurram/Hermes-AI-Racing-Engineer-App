@@ -1,6 +1,6 @@
 /**
  * Map configuration from map.ini — Yas Marina Circuit
- * Backend already sends pixel coordinates, so no conversion needed here.
+ * Used to convert AC world coordinates to pixel positions on map.png
  */
 
 export const MAP_CONFIG = {
@@ -11,6 +11,17 @@ export const MAP_CONFIG = {
   X_OFFSET: 415.172,
   Z_OFFSET: 333.286,
   DRAWING_SIZE: 10,
-  IMG_WIDTH: 1306,
-  IMG_HEIGHT: 648,
+  // The actual map.png image dimensions
+  IMG_WIDTH: 1306, // WIDTH + 2*MARGIN
+  IMG_HEIGHT: 648,  // HEIGHT + 2*MARGIN
 } as const;
+
+/**
+ * Convert AC world coordinates (x, z) to pixel position on the map image.
+ * Matches the formula used by ac_recorder.py for live driver tracking.
+ */
+export function worldToPixel(x: number, z: number): { px: number; py: number } {
+  const px = (x + MAP_CONFIG.X_OFFSET) * MAP_CONFIG.SCALE_FACTOR + MAP_CONFIG.MARGIN;
+  const py = (z + MAP_CONFIG.Z_OFFSET) * MAP_CONFIG.SCALE_FACTOR + MAP_CONFIG.MARGIN;
+  return { px, py };
+}

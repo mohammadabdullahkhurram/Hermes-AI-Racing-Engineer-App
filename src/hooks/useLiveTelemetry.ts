@@ -25,13 +25,6 @@ export function useLiveTelemetry(pollMs = 300) {
         lastUpdatedAtRef.current = data.updated_at!;
       }
 
-      // Normalize path: handle [[px,py],...] arrays from backend
-      if (Array.isArray(data.path)) {
-        data.path = (data.path as any[]).map((p: any) =>
-          Array.isArray(p) ? { px: p[0], py: p[1] } : p
-        );
-      }
-
       setTelemetry(data);
 
       const isFresh = Date.now() - lastFreshRef.current < OFFLINE_TIMEOUT_MS;
