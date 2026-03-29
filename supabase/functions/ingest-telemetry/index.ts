@@ -60,13 +60,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If a completed lap is included, insert into lap_history
+    // If a completed lap is included, insert into lap_history with full analysis payload
     if (body.completed_lap) {
       const lap = body.completed_lap;
       const { error: lapError } = await supabase.from("lap_history").insert({
         lap: lap.lap,
         time: lap.time,
         samples: lap.samples ?? 0,
+        source: lap.source ?? "live",
+        analysis: lap.analysis ?? null,
+        coaching: lap.coaching ?? null,
+        telemetry: lap.telemetry ?? null,
       });
       if (lapError) {
         console.error("Lap insert error:", lapError);
