@@ -103,6 +103,15 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
             ))}
           </div>
         )}
+
+        {status === "error" && (
+          <div style={{ marginTop: 24, background: "rgba(239,68,68,0.08)", border: `1px solid rgba(239,68,68,0.3)`, borderRadius: 10, padding: "14px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ color: C.red, fontSize: 16, marginTop: 1 }}>✗</span>
+            <div style={{ fontSize: 13, color: C.red, lineHeight: 1.6 }}>
+              <strong>Upload failed:</strong> {errorMsg}
+            </div>
+          </div>
+        )
       </div>
     </div>
   );
