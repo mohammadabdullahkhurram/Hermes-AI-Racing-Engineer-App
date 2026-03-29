@@ -94,7 +94,7 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 pixelX={t.pixel_x}
                 pixelY={t.pixel_y}
                 headingRad={t.heading_rad}
-                path={t.path || []}
+                path={lapPath}
                 connected={connected}
                 width={600}
                 height={400}
