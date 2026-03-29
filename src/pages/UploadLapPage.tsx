@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { C } from "../racing/tokens";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
+import { getBackendUrlSetting } from "../services/api";
 
 interface UploadLapPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -9,7 +10,8 @@ interface UploadLapPageProps {
 const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<"idle" | "analyzing" | "done">("idle");
+  const [status, setStatus] = useState<"idle" | "analyzing" | "done" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -19,9 +21,23 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
     if (f) setFile(f);
   };
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
+    if (!file) return;
     setStatus("analyzing");
-    setTimeout(() => { setStatus("done"); setTimeout(() => navigate("analysis"), 800); }, 1800);
+    setErrorMsg("");
+    try {
+      const base = getBackendUrlSetting();
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`${base}/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed");
+      setStatus("done");
+      setTimeout(() => navigate("analysis", { lap_id: data.lap_id }), 800);
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(err.message || "Could not reach backend. Is server.py running?");
+    }
   };
 
   return (
@@ -67,9 +83,9 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
         </div>
 
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <button onClick={handleAnalyze} disabled={status === "analyzing"}
-            style={{ flex: 1, minWidth: 160, background: file ? C.teal : C.border, color: file ? "#0a0a0c" : C.muted, border: "none", padding: "16px 24px", borderRadius: 10, cursor: file ? "pointer" : "not-allowed", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
-            {status === "analyzing" ? "ANALYZING..." : status === "done" ? "✓ DONE" : "ANALYZE LAP"}
+          <button onClick={handleAnalyze} disabled={!file || status === "analyzing"}
+            style={{ flex: 1, minWidth: 160, background: file && status !== "analyzing" ? C.teal : C.border, color: file && status !== "analyzing" ? "#0a0a0c" : C.muted, border: "none", padding: "16px 24px", borderRadius: 10, cursor: file && status !== "analyzing" ? "pointer" : "not-allowed", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
+            {status === "analyzing" ? "UPLOADING & ANALYZING..." : status === "done" ? "✓ DONE" : status === "error" ? "RETRY UPLOAD" : "ANALYZE LAP"}
           </button>
           <button onClick={() => navigate("analysis", { demo: true })}
             style={{ minWidth: 160, background: "transparent", border: `1px solid rgba(245,158,11,0.4)`, color: C.amber, padding: "16px 24px", borderRadius: 10, cursor: "pointer", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
@@ -85,6 +101,15 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
                 <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: C.muted2 }}>{step}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {status === "error" && (
+          <div style={{ marginTop: 24, background: "rgba(239,68,68,0.08)", border: `1px solid rgba(239,68,68,0.3)`, borderRadius: 10, padding: "14px 18px", display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ color: C.red, fontSize: 16, marginTop: 1 }}>✗</span>
+            <div style={{ fontSize: 13, color: C.red, lineHeight: 1.6 }}>
+              <strong>Upload failed:</strong> {errorMsg}
+            </div>
           </div>
         )}
       </div>
