@@ -5,7 +5,7 @@ import { Pill } from "../racing/SharedUI";
 import { useLiveTelemetry, type CoachingEntry } from "../hooks/useLiveTelemetry";
 import { useLaps } from "../hooks/useApiData";
 import RealTrackMap from "../racing/RealTrackMap";
-
+import { getBackendUrlSetting, setBackendUrl } from "../services/api";
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
 }
@@ -25,6 +25,10 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const live = useLiveTelemetry(200);
   const { data: laps } = useLaps();
 
+  // Backend URL settings
+  const [showSettings, setShowSettings] = useState(false);
+  const [urlInput, setUrlInput] = useState(getBackendUrlSetting());
+  const [savedUrl, setSavedUrl] = useState(getBackendUrlSetting());
   // Path history for driven trail on map
   const [pathHistory, setPathHistory] = useState<{ x: number; y: number }[]>([]);
   const lastLapRef = useRef(live.lap_num);
@@ -95,12 +99,20 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 <h2 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>Yas Marina Circuit</h2>
                 <p style={{ fontSize: 12, color: C.muted }}>Abu Dhabi · 5.28 km · 21 Turns</p>
               </div>
-              {!live.connected && (
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.red, letterSpacing: "0.1em" }}>BACKEND OFFLINE</div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Start server.py on your Mac</div>
-                </div>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {!live.connected && (
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.red, letterSpacing: "0.1em" }}>BACKEND OFFLINE</div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Start server.py on your PC</div>
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "6px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}
+                >
+                  ⚙
+                </button>
+              </div>
             </div>
             <div style={{ display: "flex", justifyContent: "center", padding: "8px 0" }}>
               <RealTrackMap
@@ -112,6 +124,48 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 height={400}
               />
             </div>
+            {showSettings && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginTop: 12 }}>
+                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", marginBottom: 8 }}>BACKEND URL</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="http://localhost:8080 or ngrok URL"
+                    style={{
+                      flex: 1, background: C.bg, border: `1px solid ${C.border2}`, borderRadius: 6,
+                      padding: "8px 12px", color: C.text, fontFamily: "'JetBrains Mono',monospace", fontSize: 12,
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      setBackendUrl(urlInput);
+                      setSavedUrl(urlInput);
+                      window.location.reload();
+                    }}
+                    style={{
+                      background: C.teal, color: C.bg, border: "none", borderRadius: 6,
+                      padding: "8px 16px", cursor: "pointer", fontFamily: "'Outfit',sans-serif",
+                      fontSize: 12, fontWeight: 600,
+                    }}
+                  >
+                    Save & Reconnect
+                  </button>
+                </div>
+                <div style={{ fontSize: 10, color: C.muted, marginTop: 6 }}>
+                  Current: <span style={{ color: C.muted2 }}>{savedUrl}</span>
+                  {savedUrl !== (import.meta.env.VITE_BACKEND_URL || "http://localhost:8080") && (
+                    <button
+                      onClick={() => { setBackendUrl(""); setUrlInput(import.meta.env.VITE_BACKEND_URL || "http://localhost:8080"); setSavedUrl(import.meta.env.VITE_BACKEND_URL || "http://localhost:8080"); window.location.reload(); }}
+                      style={{ background: "transparent", border: "none", color: C.red, cursor: "pointer", fontSize: 10, marginLeft: 8 }}
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

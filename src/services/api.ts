@@ -1,12 +1,30 @@
 /**
- * API service layer for communicating with the Flask backend on Mac.
- * Default: http://localhost:8080, override with VITE_BACKEND_URL env var.
+ * API service layer for communicating with the Flask backend.
+ * Priority: localStorage > VITE_BACKEND_URL env var > localhost:8080
  */
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+const ENV_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+
+export function getBackendUrlSetting(): string {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("backend_url");
+    if (stored) return stored;
+  }
+  return ENV_URL;
+}
+
+export function setBackendUrl(url: string) {
+  if (url) {
+    // Strip trailing slash
+    localStorage.setItem("backend_url", url.replace(/\/+$/, ""));
+  } else {
+    localStorage.removeItem("backend_url");
+  }
+}
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}${path}`);
+  const base = getBackendUrlSetting();
+  const res = await fetch(`${base}${path}`);
   if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
   return res.json();
 }
@@ -168,7 +186,7 @@ export const fetchLiveState = () =>
 export const fetchDriverStats = () =>
   apiFetch<DriverStats>("/api/driver/stats");
 
-export const getBackendUrl = () => BACKEND_URL;
+export const getBackendUrl = () => getBackendUrlSetting();
 
 // ── Demo / Offline Data Functions ────────────────────────────────────────────
 
