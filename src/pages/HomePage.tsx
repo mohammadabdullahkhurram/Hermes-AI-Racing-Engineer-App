@@ -1,6 +1,6 @@
 import React from "react";
 import { C } from "../racing/tokens";
-import TrackMap from "../racing/TrackMap";
+// TrackMap is now integrated into HeroCanvas
 import HeroCanvas from "../racing/HeroCanvas";
 
 interface HomePageProps {
