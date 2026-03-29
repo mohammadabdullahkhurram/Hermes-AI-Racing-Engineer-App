@@ -89,7 +89,10 @@ export async function fetchLiveTelemetry(): Promise<LiveTelemetry> {
     ? data.coaching as unknown as CoachingData
     : DEFAULT_TELEMETRY.coaching;
 
-  const path = Array.isArray(data.path) ? data.path as unknown as { px: number; py: number }[] : [];
+  const rawPath = Array.isArray(data.path) ? data.path : [];
+  const path = rawPath.map((p: any) =>
+    Array.isArray(p) ? { px: p[0], py: p[1] } : { px: p.px, py: p.py }
+  );
   const history = Array.isArray(data.history) ? data.history as unknown as LapHistoryItem[] : [];
 
   return {
