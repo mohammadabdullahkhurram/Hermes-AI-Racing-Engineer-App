@@ -7,7 +7,7 @@ import { C } from "../racing/tokens";
 import { fmtTime, fmtDelta } from "../racing/formatters";
 import { BackBtn, Badge } from "../racing/SharedUI";
 import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
-import TrackMap from "../racing/TrackMap";
+import BoundaryTrackMap from "../racing/BoundaryTrackMap";
 import { sampleAnalysis, sampleCoaching } from "../data/sampleAnalysis";
 import { fetchDemoLapAnalysis, fetchDemoLapCoaching, type LapAnalysis, type CoachingReport } from "../services/api";
 
