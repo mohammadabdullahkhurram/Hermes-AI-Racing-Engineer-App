@@ -67,7 +67,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
     : isDemo ? sampleCoaching
     : (apiCoaching || null);
 
-  const telemData = isUploaded && uploadedTelemetry
+  const telemData = (isUploaded || isStoredLap) && uploadedTelemetry
     ? uploadedTelemetry.dist_m.map((d: number, i: number) => ({
         dist: d,
         refSpeed: 0,
