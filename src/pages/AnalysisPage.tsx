@@ -22,17 +22,18 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
 
   const isDemo = context.demo === true;
   const isUploaded = context.uploaded === true;
+  const isStoredLap = context.storedLap === true; // live or uploaded lap with stored analysis
   const lapId = (context.lap_id as number) || null;
 
   // For demo laps from output/laps/ folder (e.g. navigated from Lap History with demo flag)
   const isDemoLap = isDemo && lapId !== null;
 
-  // Uploaded data passed directly from upload page
+  // Stored data passed directly from lap history (works for both uploaded and live laps with analysis)
   const uploadedAnalysis = (context.uploadedAnalysis as LapAnalysis) || null;
   const uploadedCoaching = (context.uploadedCoaching as CoachingReport) || null;
   const uploadedTelemetry = (context.uploadedTelemetry as any) || null;
 
-  const skipApi = isDemo || isDemoLap || isUploaded;
+  const skipApi = isDemo || isDemoLap || isUploaded || isStoredLap;
   const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(skipApi ? null : lapId);
   const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(skipApi ? null : lapId);
   const { data: apiTelemetry } = useLapTelemetry(skipApi ? null : lapId);
