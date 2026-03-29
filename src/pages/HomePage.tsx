@@ -1,5 +1,8 @@
 import React, { useCallback, useRef, useState } from "react";
 import { C } from "../racing/tokens";
+import { fmtTime } from "../racing/formatters";
+import { useLaps } from "../hooks/useApiData";
+import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
 import TrackMap from "../racing/TrackMap";
 
 interface HomePageProps {
@@ -9,6 +12,13 @@ interface HomePageProps {
 const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
   const [gridOffset, setGridOffset] = useState({ x: 0, y: 0 });
   const heroRef = useRef<HTMLDivElement>(null);
+
+  const { data: laps } = useLaps();
+  const live = useLiveTelemetry(2000); // Slow poll on home page
+
+  const bestLap = laps && laps.length > 0 ? laps.reduce((b, l) => l.lap_time_s < b.lap_time_s ? l : b) : null;
+  const latestLap = laps && laps.length > 0 ? laps[laps.length - 1] : null;
+  const totalLaps = laps?.length || 0;
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = heroRef.current?.getBoundingClientRect();
@@ -27,6 +37,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
     { icon: "⚡", title: "Live Telemetry Coaching", desc: "Real-time prompts during your session. Brake later. Carry more speed. Good exit." },
     { icon: "◈", title: "Post-Lap Performance Analysis", desc: "Full sector breakdown, time delta, driver score, and actionable coaching after every lap." },
   ];
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
       <div ref={heroRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
@@ -36,9 +47,11 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
           <TrackMap width={600} height={420} compact />
         </div>
         <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 760, padding: "0 32px" }} className="anim-in">
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.tealBg, border: `1px solid rgba(15,248,192,0.2)`, borderRadius: 20, padding: "6px 16px", marginBottom: 32 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} className="live-dot" />
-            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.teal, letterSpacing: "0.1em", textTransform: "uppercase" }}>Assetto Corsa · Live Telemetry</span>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: live.connected ? C.tealBg : C.tealBg, border: `1px solid ${live.connected ? "rgba(15,248,192,0.4)" : "rgba(15,248,192,0.2)"}`, borderRadius: 20, padding: "6px 16px", marginBottom: 32 }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: live.connected ? C.teal : C.muted }} className={live.connected ? "live-dot" : ""} />
+            <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: live.connected ? C.teal : C.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              {live.connected ? "Assetto Corsa · Connected" : "Assetto Corsa · Offline"}
+            </span>
           </div>
           <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: "clamp(52px, 8vw, 96px)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 0.95, marginBottom: 24, color: C.text }}>
             AI RACE<br />
@@ -73,9 +86,14 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
       </div>
       <div style={{ background: C.surface, borderTop: `1px solid ${C.border}`, padding: "20px 32px" }}>
         <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", justifyContent: "space-around", flexWrap: "wrap", gap: 16 }}>
-          {([["6", "Laps Recorded"], ["3", "Sectors Analyzed"], ["3", "Turns Profiled"], ["+47s", "Time Gap Closed"]] as const).map(([val, label]) => (
+          {([
+            [`${totalLaps}`, "Laps Recorded"],
+            [bestLap ? fmtTime(bestLap.lap_time_s) : "—", "Personal Best"],
+            [latestLap ? fmtTime(latestLap.lap_time_s) : "—", "Latest Lap"],
+            [live.connected ? "LIVE" : "OFFLINE", "Backend Status"],
+          ] as const).map(([val, label]) => (
             <div key={label} style={{ textAlign: "center" }}>
-              <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 28, fontWeight: 700, color: C.teal }}>{val}</div>
+              <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 28, fontWeight: 700, color: label === "Backend Status" ? (live.connected ? C.teal : C.muted) : C.teal }}>{val}</div>
               <div style={{ fontSize: 11, color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
             </div>
           ))}

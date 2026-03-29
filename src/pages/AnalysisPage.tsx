@@ -7,6 +7,7 @@ import { C } from "../racing/tokens";
 import { fmtTime, fmtDelta } from "../racing/formatters";
 import { BackBtn } from "../racing/SharedUI";
 import { DEMO_ANALYSIS, DEMO_COACHING, TELEM_DATA } from "../racing/demoData";
+import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
 import TrackMap from "../racing/TrackMap";
 
 interface AnalysisPageProps {
@@ -17,22 +18,40 @@ interface AnalysisPageProps {
 const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) => {
   const [activeTab, setActiveTab] = useState("speed");
   const [activeCorner, setActiveCorner] = useState<string | null>(null);
-  const analysis = DEMO_ANALYSIS;
-  const coaching = DEMO_COACHING;
+
+  const lapId = (context.lap_id as number) || null;
+  const isDemo = context.demo === true || !lapId;
+
+  const { data: apiAnalysis } = useLapAnalysis(lapId);
+  const { data: apiCoaching } = useLapCoaching(lapId);
+  const { data: apiTelemetry } = useLapTelemetry(lapId);
+
+  const analysis = apiAnalysis || DEMO_ANALYSIS;
+  const coaching = apiCoaching || DEMO_COACHING;
+
+  // Build telemetry chart data from API or demo
+  const telemData = apiTelemetry ? apiTelemetry.dist_m.map((d, i) => ({
+    dist: d,
+    refSpeed: 0, // Reference not in per-lap telemetry
+    compSpeed: Math.round(apiTelemetry.speed_kmh[i] || 0),
+    throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
+    brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
+    steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+  })) : TELEM_DATA;
 
   const summaryCards = [
-    { label: "Lap Time", value: fmtTime(analysis.comp_lap_time_s), color: C.text, sub: "ac_lap1" },
-    { label: "Delta to Ref", value: fmtDelta(analysis.total_time_delta_s), color: C.red, sub: "vs fast_laps" },
-    { label: "Best Sector", value: "S3", color: C.teal, sub: "-2.831s ahead" },
-    { label: "Worst Sector", value: "S1", color: C.red, sub: "+38.6s lost" },
-    { label: "Driver Score", value: "61/100", color: C.amber, sub: "good potential" },
-    { label: "Potential Gain", value: "1.209s", color: C.teal, sub: "identified" },
+    { label: "Lap Time", value: fmtTime(analysis.comp_lap_time_s), color: C.text, sub: analysis.comp_label || "your lap" },
+    { label: "Delta to Ref", value: fmtDelta(analysis.total_time_delta_s), color: C.red, sub: `vs ${analysis.ref_label || "reference"}` },
+    { label: "Best Sector", value: analysis.sectors.reduce((best, s) => s.time_delta_s < (best?.time_delta_s ?? Infinity) ? s : best, analysis.sectors[0])?.sector_name || "—", color: C.teal, sub: "least time lost" },
+    { label: "Worst Sector", value: analysis.sectors.reduce((worst, s) => s.time_delta_s > (worst?.time_delta_s ?? -Infinity) ? s : worst, analysis.sectors[0])?.sector_name || "—", color: C.red, sub: "most time lost" },
+    { label: "Corners", value: `${analysis.corners?.length || 0}`, color: C.amber, sub: "analyzed" },
+    { label: "Potential Gain", value: `${((coaching.priority_actions || []).reduce((sum, a) => sum + a.time_gain_s, 0)).toFixed(3)}s`, color: C.teal, sub: "identified" },
   ];
 
   const tabs = ["speed", "throttle", "brake", "steering", "sectors"];
 
   const tabData: Record<string, { key1: string; key2: string; color1: string; color2: string; label1: string; label2: string; unit: string; domain: [number, number] }> = {
-    speed: { key1: "refSpeed", key2: "compSpeed", color1: C.teal, color2: C.red, label1: "Reference", label2: "ac_lap1", unit: "km/h", domain: [30, 280] },
+    speed: { key1: "refSpeed", key2: "compSpeed", color1: C.teal, color2: C.red, label1: "Reference", label2: analysis.comp_label || "Your Lap", unit: "km/h", domain: [30, 280] },
     throttle: { key1: "throttle", key2: "throttle", color1: C.teal, color2: C.amber, label1: "Throttle %", label2: "", unit: "%", domain: [0, 100] },
     brake: { key1: "brake", key2: "brake", color1: C.red, color2: C.redDim, label1: "Brake %", label2: "", unit: "%", domain: [0, 100] },
     steering: { key1: "steering", key2: "steering", color1: C.blue, color2: C.purple, label1: "Steering °", label2: "", unit: "°", domain: [-200, 200] },
@@ -47,7 +66,11 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
             <div>
               <BackBtn onClick={() => navigate("history")} />
-              <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 42, fontWeight: 700, color: C.text, marginTop: 12, letterSpacing: "-0.01em" }}>Lap Analysis</h1>
+              <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 42, fontWeight: 700, color: C.text, marginTop: 12, letterSpacing: "-0.01em" }}>
+                Lap Analysis
+                {isDemo && <span style={{ fontSize: 16, color: C.amber, marginLeft: 12, fontWeight: 400 }}>DEMO</span>}
+                {!isDemo && lapId && <span style={{ fontSize: 16, color: C.teal, marginLeft: 12, fontWeight: 400 }}>LAP {lapId}</span>}
+              </h1>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "10px 18px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}>⟳ Replay</button>
@@ -58,12 +81,10 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
 
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 20px", marginBottom: 24, display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
           {([
-            ["Lap", "LAP 1"],
+            ["Lap", lapId ? `LAP ${lapId}` : "DEMO"],
             ["Track", "Yas Marina"],
-            ["Car", "Ferrari 488 GT3"],
-            ["Source", "AC Live"],
-            ["Session", "Practice"],
-            ["Date", "2024-01-15 14:23"],
+            ["Reference", analysis.ref_label || "fast_laps"],
+            ["Source", isDemo ? "Demo Data" : "AC Live"],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>{k}</span>
@@ -123,7 +144,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
             <div style={{ padding: 20, flex: 1, overflowY: "auto" }}>
               <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7, marginBottom: 20 }}>{coaching.overall_summary}</p>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>PRIORITY ACTIONS</div>
-              {coaching.priority_actions.map((action, i) => (
+              {(coaching.priority_actions || []).map((action, i) => (
                 <div key={i} style={{ background: "rgba(15,248,192,0.04)", border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 10, padding: "14px", marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, color: C.text }}>{action.location}</span>
@@ -133,13 +154,17 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
                   <p style={{ fontSize: 12, color: C.teal, lineHeight: 1.5, fontStyle: "italic" }}>{action.instruction}</p>
                 </div>
               ))}
-              <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", margin: "16px 0 10px" }}>POSITIVE NOTES</div>
-              {coaching.positive_observations.map((obs, i) => (
-                <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
-                  <span style={{ color: C.teal, fontSize: 12, marginTop: 1 }}>✓</span>
-                  <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{obs}</span>
-                </div>
-              ))}
+              {(coaching.positive_observations || []).length > 0 && (
+                <>
+                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", margin: "16px 0 10px" }}>POSITIVE NOTES</div>
+                  {coaching.positive_observations.map((obs, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, padding: "5px 0", alignItems: "flex-start" }}>
+                      <span style={{ color: C.teal, fontSize: 12, marginTop: 1 }}>✓</span>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{obs}</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -159,7 +184,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
                 ["Entry Speed (Ref)", `${selectedCornerData.ref_entry_speed_kmh.toFixed(1)} km/h`, C.teal],
                 ["Apex Speed (You)", `${selectedCornerData.comp_apex_speed_kmh.toFixed(1)} km/h`, C.amber],
                 ["Apex Speed (Ref)", `${selectedCornerData.ref_apex_speed_kmh.toFixed(1)} km/h`, C.teal],
-                ["Brake Point Diff", `${selectedCornerData.brake_point_delta_m > 0 ? "+" : ""}${selectedCornerData.brake_point_delta_m}m`, C.red],
+                ["Brake Point Diff", `${(selectedCornerData.brake_point_delta_m || 0) > 0 ? "+" : ""}${selectedCornerData.brake_point_delta_m || 0}m`, C.red],
               ] as const).map(([label, value, color]) => (
                 <div key={label} style={{ background: C.surface, borderRadius: 10, padding: "14px" }}>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", marginBottom: 6 }}>{(label as string).toUpperCase()}</div>
@@ -219,20 +244,21 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
                   ))}
                 </div>
                 <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={TELEM_DATA} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
+                  <AreaChart data={telemData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
                     <XAxis dataKey="dist" stroke={C.muted} tick={{ fill: C.muted, fontSize: 10, fontFamily: "'JetBrains Mono',monospace" }} tickLine={false} axisLine={false} label={{ value: "Distance (m)", position: "insideBottom", offset: -5, fill: C.muted, fontSize: 10 }} />
                     <YAxis stroke={C.muted} tick={{ fill: C.muted, fontSize: 10, fontFamily: "'JetBrains Mono',monospace" }} tickLine={false} axisLine={false} domain={tabData[activeTab]?.domain} />
                     <Tooltip contentStyle={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.text }} />
                     {activeTab === "speed" ? (
                       <>
-                        <Area type="monotone" dataKey="refSpeed" stroke={C.teal} strokeWidth={1.5} fill="rgba(15,248,192,0.06)" dot={false} name="Reference" />
-                        <Area type="monotone" dataKey="compSpeed" stroke={C.red} strokeWidth={1.5} fill="rgba(244,63,94,0.04)" dot={false} name="ac_lap1" />
+                        {telemData[0]?.refSpeed > 0 && (
+                          <Area type="monotone" dataKey="refSpeed" stroke={C.teal} strokeWidth={1.5} fill="rgba(15,248,192,0.06)" dot={false} name="Reference" />
+                        )}
+                        <Area type="monotone" dataKey="compSpeed" stroke={C.red} strokeWidth={1.5} fill="rgba(244,63,94,0.04)" dot={false} name={analysis.comp_label || "Your Lap"} />
                       </>
                     ) : (
                       <Area type="monotone" dataKey={activeTab} stroke={tabData[activeTab]?.color1 || C.teal} strokeWidth={1.5} fill={`${tabData[activeTab]?.color1 || C.teal}10`} dot={false} name={tabData[activeTab]?.label1} />
                     )}
-                    {[1141, 2283].map(d => <ReferenceLine key={d} x={d} stroke={C.muted} strokeDasharray="4 4" strokeWidth={1} label={{ value: d === 1141 ? "S1/S2" : "S2/S3", fill: C.muted, fontSize: 9, fontFamily: "'JetBrains Mono',monospace" }} />)}
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -246,8 +272,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
               <h3 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.text }}>Sector Feedback</h3>
             </div>
             <div>
-              {coaching.sector_feedback.map((sf, i) => (
-                <div key={i} style={{ padding: "16px 20px", borderBottom: i < coaching.sector_feedback.length - 1 ? `1px solid ${C.border}` : "none", display: "flex", gap: 14, alignItems: "flex-start" }}>
+              {(coaching.sector_feedback || []).map((sf, i) => (
+                <div key={i} style={{ padding: "16px 20px", borderBottom: i < (coaching.sector_feedback || []).length - 1 ? `1px solid ${C.border}` : "none", display: "flex", gap: 14, alignItems: "flex-start" }}>
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: sf.has_issues ? C.redBg : C.tealBg, border: `1px solid ${sf.has_issues ? "rgba(244,63,94,0.2)" : "rgba(15,248,192,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <span style={{ fontSize: 14 }}>{sf.has_issues ? "⚠" : "✓"}</span>
                   </div>
@@ -265,39 +291,22 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
 
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden" }}>
             <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}` }}>
-              <h3 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.text }}>Performance Statistics</h3>
+              <h3 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.text }}>Corner Coaching</h3>
             </div>
             <div style={{ padding: 20 }}>
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted }}>DRIVER SCORE</span>
-                  <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: C.amber }}>61/100</span>
-                </div>
-                <div style={{ height: 6, background: C.border2, borderRadius: 3 }}>
-                  <div style={{ height: "100%", width: "61%", background: `linear-gradient(90deg, ${C.amber}, ${C.teal})`, borderRadius: 3 }} />
-                </div>
-              </div>
-              {([
-                ["Consistency", 72, C.teal],
-                ["Braking Efficiency", 58, C.amber],
-                ["Corner Exit Speed", 65, C.blue],
-                ["Throttle Application", 70, C.teal],
-                ["Sector Execution", 55, C.red],
-              ] as const).map(([label, val, color]) => (
-                <div key={label} style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
-                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color }}>{val}%</span>
+              {(coaching.corner_coaching || []).map((c, i) => (
+                <div key={i} style={{ background: "rgba(15,248,192,0.04)", border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 10, padding: "14px", marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 14, fontWeight: 700, color: C.text }}>{c.corner} @ {c.dist_m}m</span>
+                    <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.teal }}>+{c.time_gain_s.toFixed(3)}s</span>
                   </div>
-                  <div style={{ height: 3, background: C.border2, borderRadius: 2 }}>
-                    <div style={{ height: "100%", width: `${val}%`, background: color, borderRadius: 2 }} />
-                  </div>
+                  <p style={{ fontSize: 12, color: C.muted2, lineHeight: 1.5, marginBottom: 4 }}>{c.technique_issue}</p>
+                  <p style={{ fontSize: 12, color: C.teal, lineHeight: 1.5, fontStyle: "italic" }}>{c.fix}</p>
                 </div>
               ))}
-              <div style={{ background: "rgba(15,248,192,0.05)", border: `1px solid rgba(15,248,192,0.12)`, borderRadius: 10, padding: 14, marginTop: 16 }}>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.teal, letterSpacing: "0.1em", marginBottom: 6 }}>COACH SUMMARY</div>
-                <p style={{ fontSize: 13, color: C.muted2, lineHeight: 1.6 }}>You have real pace in Sectors 2 and 3. Sector 1 is the primary focus — fix Turn 1 entry and the lap time drops significantly. Keep attacking.</p>
-              </div>
+              {(!coaching.corner_coaching || coaching.corner_coaching.length === 0) && (
+                <div style={{ textAlign: "center", padding: "20px", color: C.muted, fontSize: 13 }}>No corner coaching data available</div>
+              )}
             </div>
           </div>
         </div>
