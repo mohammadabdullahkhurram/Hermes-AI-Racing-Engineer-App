@@ -15,7 +15,10 @@
   https://github.com/mohammadabdullahkhurram/Hermes-AI-Racing-Engineer-App  
 
 - **Backend Repository (Initial Version):**  
-  https://github.com/mohammadabdullahkhurram/Hermes-AI-Racing-Engineer-Backend  
+  https://github.com/mohammadabdullahkhurram/Hermes-AI-Racing-Engineer-Backend
+
+- **Project Video:**  
+  https://drive.google.com/drive/folders/1z2mDeMUYH4XRaBBywKOuN71NJKGin2BR?usp=sharing
 
 ## 📌 Project Overview
 
