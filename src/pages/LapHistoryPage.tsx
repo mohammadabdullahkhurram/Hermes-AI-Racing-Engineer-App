@@ -59,14 +59,19 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   const filters = ["latest", "best", "fastest"];
 
   const handleLapClick = (lap: LapHistoryItem) => {
-    if (lap.source === "uploaded" && lap.analysis) {
+    // If analysis data is stored in the record (uploaded OR live with analysis), pass it directly
+    if (lap.analysis) {
       navigate("analysis", {
+        lap_id: lap.lap,
         uploadedAnalysis: lap.analysis,
         uploadedCoaching: lap.coaching,
         uploadedTelemetry: lap.telemetry,
-        uploaded: true,
+        uploaded: lap.source === "uploaded",
+        storedLap: true,
+        source: lap.source,
       });
     } else {
+      // No stored analysis — try Flask backend (legacy) or show "no analysis"
       navigate("analysis", { lap_id: lap.lap });
     }
   };
