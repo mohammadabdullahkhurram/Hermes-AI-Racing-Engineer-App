@@ -53,12 +53,21 @@ const HeroCanvas: React.FC = () => {
           }}
         />
       )}
-      {/* Vignette overlay for text readability */}
+      {/* Dark tint for readability */}
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: "radial-gradient(ellipse 90% 70% at 50% 40%, transparent 30%, rgba(5,5,7,0.7) 100%)",
+          background: "rgba(5,5,7,0.55)",
+          pointerEvents: "none",
+        }}
+      />
+      {/* Vignette overlay */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "radial-gradient(ellipse 90% 70% at 50% 40%, transparent 20%, rgba(5,5,7,0.6) 100%)",
           pointerEvents: "none",
         }}
       />
