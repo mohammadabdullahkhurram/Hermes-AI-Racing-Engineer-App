@@ -11,21 +11,34 @@ export function useLiveTelemetry(pollMs = 300) {
   const [telemetry, setTelemetry] = useState<LiveTelemetry>(DEFAULT_TELEMETRY);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastDataRef = useRef<number>(0);
+  const lastFreshRef = useRef<number>(0);
+  const lastUpdatedAtRef = useRef<string>("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const poll = useCallback(async () => {
     try {
       const data = await fetchLiveTelemetry();
+      // Check if data is actually fresh (updated_at changed)
+      const isNewData = data.updated_at && data.updated_at !== lastUpdatedAtRef.current;
+      if (isNewData) {
+        lastFreshRef.current = Date.now();
+        lastUpdatedAtRef.current = data.updated_at!;
+      }
+
       setTelemetry(data);
-      setConnected(true);
       setError(null);
-      lastDataRef.current = Date.now();
-    } catch {
-      // Check if we've exceeded the offline timeout
-      if (Date.now() - lastDataRef.current > OFFLINE_TIMEOUT_MS) {
+
+      // Connected if we got fresh data within timeout
+      if (Date.now() - lastFreshRef.current < OFFLINE_TIMEOUT_MS) {
+        setConnected(true);
+      } else {
         setConnected(false);
         setError("Recorder offline / waiting for telemetry");
+      }
+    } catch {
+      if (Date.now() - lastFreshRef.current > OFFLINE_TIMEOUT_MS) {
+        setConnected(false);
+        setError("Cloud connection error");
       }
     }
   }, []);
