@@ -71,8 +71,8 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
             style={{ flex: 1, minWidth: 160, background: file ? C.teal : C.border, color: file ? "#0a0a0c" : C.muted, border: "none", padding: "16px 24px", borderRadius: 10, cursor: file ? "pointer" : "not-allowed", fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", transition: "all 0.2s" }}>
             {status === "analyzing" ? "ANALYZING..." : status === "done" ? "✓ DONE" : "ANALYZE LAP"}
           </button>
-          <button onClick={() => navigate("analysis", { demo: true })} className="btn-primary"
-            style={{ flex: 1, minWidth: 160, background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "16px 24px", borderRadius: 10, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>
+          <button onClick={() => navigate("analysis", { demo: true })} className="btn-primary btn-red-accent"
+            style={{ flex: 1, minWidth: 160, padding: "16px 24px", borderRadius: 10, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 14 }}>
             ◈ Load Demo Data
           </button>
         </div>
