@@ -111,7 +111,7 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
               <strong>Upload failed:</strong> {errorMsg}
             </div>
           </div>
-        )
+        )}
       </div>
     </div>
   );
