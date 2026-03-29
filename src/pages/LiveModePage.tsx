@@ -5,7 +5,7 @@ import { Pill } from "../racing/SharedUI";
 import { useLiveTelemetry, type CoachingEntry } from "../hooks/useLiveTelemetry";
 import { useLaps } from "../hooks/useApiData";
 import RealTrackMap from "../racing/RealTrackMap";
-
+import { getBackendUrlSetting, setBackendUrl } from "../services/api";
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
 }
@@ -25,6 +25,10 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const live = useLiveTelemetry(200);
   const { data: laps } = useLaps();
 
+  // Backend URL settings
+  const [showSettings, setShowSettings] = useState(false);
+  const [urlInput, setUrlInput] = useState(getBackendUrlSetting());
+  const [savedUrl, setSavedUrl] = useState(getBackendUrlSetting());
   // Path history for driven trail on map
   const [pathHistory, setPathHistory] = useState<{ x: number; y: number }[]>([]);
   const lastLapRef = useRef(live.lap_num);
