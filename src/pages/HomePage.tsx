@@ -16,8 +16,8 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
       <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
-        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,248,192,0.04) 0%, transparent 70%)` }} />
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px)", backgroundSize: "80px 80px" }} />
+        <HeroCanvas />
+        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,248,192,0.04) 0%, transparent 70%)`, pointerEvents: "none" }} />
         <div style={{ position: "absolute", top: "10%", right: "-5%", opacity: 0.06 }}>
           <TrackMap width={600} height={420} compact />
         </div>
