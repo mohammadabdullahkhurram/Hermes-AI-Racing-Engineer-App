@@ -16,24 +16,39 @@ export type Database = {
     Tables: {
       lap_history: {
         Row: {
+          analysis: Json | null
+          coaching: Json | null
           created_at: string
+          filename: string | null
           id: string
           lap: number
           samples: number
+          source: string
+          telemetry: Json | null
           time: string
         }
         Insert: {
+          analysis?: Json | null
+          coaching?: Json | null
           created_at?: string
+          filename?: string | null
           id?: string
           lap: number
           samples?: number
+          source?: string
+          telemetry?: Json | null
           time: string
         }
         Update: {
+          analysis?: Json | null
+          coaching?: Json | null
           created_at?: string
+          filename?: string | null
           id?: string
           lap?: number
           samples?: number
+          source?: string
+          telemetry?: Json | null
           time?: string
         }
         Relationships: []

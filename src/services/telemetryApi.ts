@@ -39,9 +39,16 @@ export interface LiveTelemetry {
 }
 
 export interface LapHistoryItem {
+  id?: string;
   lap: number;
   time: string;
   samples: number;
+  source: "live" | "uploaded";
+  filename?: string;
+  analysis?: any;
+  coaching?: any;
+  telemetry?: any;
+  created_at?: string;
 }
 
 // ── Default / empty state ────────────────────────────────────────────────────
@@ -119,10 +126,21 @@ export async function fetchLiveTelemetry(): Promise<LiveTelemetry> {
 export async function fetchLapHistory(): Promise<LapHistoryItem[]> {
   const { data, error } = await supabase
     .from("lap_history")
-    .select("lap, time, samples")
+    .select("id, lap, time, samples, source, filename, analysis, coaching, telemetry, created_at")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(200);
 
   if (error) throw new Error(error.message);
-  return (data || []) as LapHistoryItem[];
+  return (data || []).map((d: any) => ({
+    id: d.id,
+    lap: d.lap,
+    time: d.time,
+    samples: d.samples,
+    source: d.source || "live",
+    filename: d.filename || undefined,
+    analysis: d.analysis || undefined,
+    coaching: d.coaching || undefined,
+    telemetry: d.telemetry || undefined,
+    created_at: d.created_at,
+  }));
 }
