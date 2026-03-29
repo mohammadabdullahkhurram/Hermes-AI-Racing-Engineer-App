@@ -21,7 +21,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
   const [activeCorner, setActiveCorner] = useState<string | null>(null);
 
   const isDemo = context.demo === true;
-  const lapId = isDemo ? null : (context.lap_id as number) || null;
+  const lapId = (context.lap_id as number) || null;
 
   // For demo laps from output/laps/ folder (e.g. navigated from Lap History with demo flag)
   const isDemoLap = isDemo && lapId !== null;
