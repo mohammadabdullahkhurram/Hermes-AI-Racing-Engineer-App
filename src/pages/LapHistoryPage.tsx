@@ -3,7 +3,6 @@ import { C } from "../racing/tokens";
 import { fmtTime } from "../racing/formatters";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
 import { useLaps } from "../hooks/useApiData";
-import { DEMO_LAPS } from "../racing/demoData";
 
 interface LapHistoryPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -13,7 +12,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   const [filter, setFilter] = useState("latest");
   const { data: apiLaps, isError } = useLaps();
 
-  // Use API data if available, fall back to demo data
+  // Use API data if available
   const rawLaps = (apiLaps && apiLaps.length > 0) ? apiLaps.map((l, i) => ({
     id: l.lap_id,
     lap_number: l.lap_id,
@@ -28,7 +27,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
     is_best: l.lap_time_s === Math.min(...apiLaps.map(x => x.lap_time_s)),
     source: "AC Live",
     lap_id: l.lap_id,
-  })) : (isError ? DEMO_LAPS : []);
+  })) : [];
 
   const sortedLaps = [...rawLaps].sort((a, b) => {
     if (filter === "latest") return b.id - a.id;
@@ -50,7 +49,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
               <p style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>
                 {sortedLaps.length} laps recorded
                 {isLive && <span style={{ color: C.teal, marginLeft: 8 }}>● LIVE DATA</span>}
-                {isError && <span style={{ color: C.amber, marginLeft: 8 }}>● DEMO DATA (backend offline)</span>}
+                {isError && <span style={{ color: C.amber, marginLeft: 8 }}>● Backend offline</span>}
                 {!isError && (!apiLaps || apiLaps.length === 0) && <span style={{ color: C.muted, marginLeft: 8 }}>● Loading...</span>}
               </p>
             </div>
