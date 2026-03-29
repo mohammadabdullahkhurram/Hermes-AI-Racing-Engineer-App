@@ -3,6 +3,7 @@ import { C } from "../racing/tokens";
 import { fmtTime } from "../racing/formatters";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
 import { useLaps } from "../hooks/useApiData";
+import { fetchDemoLaps } from "../services/api";
 
 interface LapHistoryPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -12,8 +13,12 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   const [filter, setFilter] = useState("latest");
   const { data: apiLaps, isError } = useLaps();
 
-  // Use API data if available
-  const rawLaps = (apiLaps && apiLaps.length > 0) ? apiLaps.map((l, i) => ({
+  // Use API data if available, otherwise fall back to demo laps
+  const isLive = apiLaps && apiLaps.length > 0;
+  const isDemo = isError || (!isLive && !apiLaps);
+  const sourceLaps = isLive ? apiLaps : (isError ? fetchDemoLaps() : []);
+
+  const rawLaps = sourceLaps.map((l, i) => ({
     id: l.lap_id,
     lap_number: l.lap_id,
     lap_time_s: l.lap_time_s,
@@ -23,11 +28,11 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
     car: "Assetto Corsa",
     gap_to_ref: l.gap_s === 0 ? "REF" : (l.gap_s > 0 ? `+${l.gap_s.toFixed(3)}` : `${l.gap_s.toFixed(3)}`),
     samples: l.samples,
-    is_latest: i === apiLaps.length - 1,
-    is_best: l.lap_time_s === Math.min(...apiLaps.map(x => x.lap_time_s)),
-    source: "AC Live",
+    is_latest: i === sourceLaps.length - 1,
+    is_best: l.lap_time_s === Math.min(...sourceLaps.map(x => x.lap_time_s)),
+    source: isLive ? "AC Live" : "Demo",
     lap_id: l.lap_id,
-  })) : [];
+  }));
 
   const sortedLaps = [...rawLaps].sort((a, b) => {
     if (filter === "latest") return b.id - a.id;
@@ -36,7 +41,6 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   });
 
   const filters = ["latest", "best", "fastest", "by track", "by car"];
-  const isLive = apiLaps && apiLaps.length > 0;
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, paddingBottom: 80 }}>
@@ -49,8 +53,8 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
               <p style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>
                 {sortedLaps.length} laps recorded
                 {isLive && <span style={{ color: C.teal, marginLeft: 8 }}>● LIVE DATA</span>}
-                {isError && <span style={{ color: C.amber, marginLeft: 8 }}>● Backend offline</span>}
-                {!isError && (!apiLaps || apiLaps.length === 0) && <span style={{ color: C.muted, marginLeft: 8 }}>● Loading...</span>}
+                {isDemo && <span style={{ color: C.amber, marginLeft: 8 }}>● DEMO DATA</span>}
+                {!isError && !isLive && !isDemo && <span style={{ color: C.muted, marginLeft: 8 }}>● Loading...</span>}
               </p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -86,6 +90,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
                       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                         {isBest && <Badge text="BEST" color="teal" />}
                         {isLatest && <Badge text="LATEST" color="red" />}
+                        {!isLive && <Badge text="DEMO" color="amber" />}
                         <Pill color="muted">{lap.source}</Pill>
                       </div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, letterSpacing: "0.06em" }}>LAP {lap.lap_number}</div>
@@ -112,7 +117,7 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
                   </div>
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>{lap.session}</div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => navigate("analysis", { lap_id: (lap as any).lap_id || lap.id })} style={{ flex: 1, background: accentColor === C.teal ? C.tealBg : C.redBg, border: `1px solid ${accentColor}25`, color: accentColor, padding: "9px 0", borderRadius: 7, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" }}>
+                    <button onClick={() => navigate("analysis", { lap_id: lap.lap_id, demo: !isLive })} style={{ flex: 1, background: accentColor === C.teal ? C.tealBg : C.redBg, border: `1px solid ${accentColor}25`, color: accentColor, padding: "9px 0", borderRadius: 7, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" }}>
                       View Analysis
                     </button>
                     <button style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted, padding: "9px 12px", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>↓</button>

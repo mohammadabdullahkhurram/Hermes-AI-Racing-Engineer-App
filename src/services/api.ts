@@ -169,3 +169,31 @@ export const fetchDriverStats = () =>
   apiFetch<DriverStats>("/api/driver/stats");
 
 export const getBackendUrl = () => BACKEND_URL;
+
+// ── Demo / Offline Data Functions ────────────────────────────────────────────
+
+/** Fetch demo lap analysis from output/laps/lap_<id>/ */
+export const fetchDemoLapAnalysis = async (lapId: number): Promise<LapAnalysis> => {
+  const res = await fetch(`/data/output/laps/lap_${lapId}/analysis.json`);
+  if (!res.ok) throw new Error(`Demo analysis not found for lap ${lapId}`);
+  return res.json();
+};
+
+/** Fetch demo lap coaching from output/laps/lap_<id>/ */
+export const fetchDemoLapCoaching = async (lapId: number): Promise<CoachingReport> => {
+  const res = await fetch(`/data/output/laps/lap_${lapId}/coaching.json`);
+  if (!res.ok) throw new Error(`Demo coaching not found for lap ${lapId}`);
+  return res.json();
+};
+
+/** Returns hardcoded demo laps from the output/laps/ folder structure */
+export const fetchDemoLaps = (): LapEntry[] => [
+  {
+    lap_id: 1,
+    label: "Demo Session – Yas Marina",
+    lap_time_s: 81.259,
+    gap_s: 7.0,
+    samples: 10,
+    timestamp: "2025-03-15T14:32:00",
+  },
+];
