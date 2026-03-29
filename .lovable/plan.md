@@ -1,38 +1,41 @@
 
 
-## Fix: Path Data Format Mismatch & Test Live Mode
+## Fix Track Map Alignment — Canvas-Based Rendering
 
 ### Problem
-Two issues prevent proper end-to-end verification:
+The SVG overlay uses hardcoded dimensions and a viewBox that doesn't dynamically track the rendered image size, causing the car marker and path to be offset from the track.
 
-1. **Path format mismatch** — The Python recorder sends path as `[[px, py], ...]` arrays. The frontend expects `{px, py}` objects but does zero conversion. Result: the trail polyline never renders (all coordinates are `undefined`).
+### Solution
+Replace the SVG overlay with a `<canvas>` that exactly mirrors the working Python recorder logic.
 
-2. **Cannot test edge function via tooling** — The `curl_edge_functions` tool cannot inject the `TELEMETRY_INGEST_SECRET` value, so I can't send fresh test packets to make the car marker appear (it only shows when `connected=true`, which requires data fresher than 5 seconds).
+### Changes
 
-### Plan
+**`src/racing/RealTrackMap.tsx`** — Full rewrite:
+- Remove SVG overlay, add a `<canvas>` absolutely positioned over the `<img>` using `inset: 0`
+- Let the image scale naturally: `max-width: 100%; height: auto` (preserves aspect ratio)
+- On image load + resize (via `ResizeObserver`), sync canvas size to `getBoundingClientRect()`
+- Compute scale factors: `sx = renderedWidth / img.naturalWidth`, `sy = renderedHeight / img.naturalHeight`
+- Draw path: iterate `path[]`, multiply each point by `sx`/`sy`, draw as canvas polyline
+- Draw car: `ctx.translate(px * sx, py * sy)` → `ctx.rotate(headingRad)` → draw rotated rectangle (matching Python's car shape with outer glow, inner body, and teal nose)
+- Remove `width`/`height` props (container controls sizing, image scales to fit)
 
-**File: `src/services/telemetryApi.ts` (line ~92)**
-- Normalize the `path` array: if elements are arrays `[px, py]`, convert to `{ px, py }` objects. If already objects, pass through.
+**`src/racing/mapConfig.ts`** — No changes needed (config values kept for reference; component will use `naturalWidth`/`naturalHeight` directly)
 
-```typescript
-// Before (broken):
-const path = Array.isArray(data.path) ? data.path as unknown as { px: number; py: number }[] : [];
-
-// After (handles both formats):
-const rawPath = Array.isArray(data.path) ? data.path : [];
-const path = rawPath.map((p: any) =>
-  Array.isArray(p) ? { px: p[0], py: p[1] } : { px: p.px, py: p.py }
-);
+### Technical Detail
+Python's exact logic being ported:
+```text
+baseW = img.naturalWidth    (map.png actual width)
+baseH = img.naturalHeight   (map.png actual height)
+sx = canvasRenderedWidth / baseW
+sy = canvasRenderedHeight / baseH
+drawX = pixel_x * sx
+drawY = pixel_y * sy
 ```
 
-This single change fixes the trail rendering. The car dot position (`pixel_x`/`pixel_y`) is read correctly already.
-
-### Testing approach
-After the fix, you can verify by running the Python recorder on your Windows PC. The trail should draw along the track and the car dot should appear at the correct position when data is fresh.
-
-### Technical details
-- Map image: `public/images/yas_marina_map.png` exists and loads correctly
-- SVG viewBox `0 0 1306 648` matches the image dimensions
-- Current DB has realistic data: pixel_x=622, pixel_y=423, 300+ path points along the track
-- The car marker only renders when `connected && hasPosition` — requires fresh data (within 5s)
+Canvas resizing:
+```text
+rect = img.getBoundingClientRect()
+canvas.width = rect.width
+canvas.height = rect.height
+```
 
