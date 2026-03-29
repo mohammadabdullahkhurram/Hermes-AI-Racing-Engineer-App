@@ -68,16 +68,36 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
     : (apiCoaching || null);
 
   const telemData = (isUploaded || isStoredLap) && uploadedTelemetry
-    ? uploadedTelemetry.dist_m.map((d: number, i: number) => ({
-        dist: d,
-        refSpeed: 0,
-        compSpeed: Math.round(uploadedTelemetry.speed_kmh[i] || 0),
-        throttle: Math.round((uploadedTelemetry.throttle[i] || 0) * 100),
-        brake: Math.round((uploadedTelemetry.brake[i] || 0) * 100),
-        steering: Math.round((uploadedTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
-        worldX: uploadedTelemetry.car_x?.[i] ?? uploadedTelemetry.x?.[i] ?? 0,
-        worldY: uploadedTelemetry.car_z?.[i] ?? uploadedTelemetry.y?.[i] ?? 0,
-      }))
+    ? (uploadedTelemetry.ref && uploadedTelemetry.comp
+      // New format: ref + comp aligned channels
+      ? uploadedTelemetry.comp.dist_m.map((d: number, i: number) => {
+          const ri = i; // already aligned on same grid
+          return {
+            dist: d,
+            refSpeed: Math.round(uploadedTelemetry.ref.speed_kmh[ri] || 0),
+            compSpeed: Math.round(uploadedTelemetry.comp.speed_kmh[i] || 0),
+            throttle: Math.round((uploadedTelemetry.comp.throttle[i] || 0) * 100),
+            brake: Math.round((uploadedTelemetry.comp.brake[i] || 0) * 100),
+            steering: Math.round((uploadedTelemetry.comp.steering?.[i] || 0) * (180 / Math.PI)),
+            refThrottle: Math.round((uploadedTelemetry.ref.throttle[ri] || 0) * 100),
+            refBrake: Math.round((uploadedTelemetry.ref.brake[ri] || 0) * 100),
+            refSteering: Math.round((uploadedTelemetry.ref.steering?.[ri] || 0) * (180 / Math.PI)),
+            worldX: uploadedTelemetry.comp.x?.[i] ?? 0,
+            worldY: uploadedTelemetry.comp.y?.[i] ?? 0,
+          };
+        })
+      // Legacy format: flat arrays, no reference
+      : uploadedTelemetry.dist_m.map((d: number, i: number) => ({
+          dist: d,
+          refSpeed: 0,
+          compSpeed: Math.round(uploadedTelemetry.speed_kmh[i] || 0),
+          throttle: Math.round((uploadedTelemetry.throttle[i] || 0) * 100),
+          brake: Math.round((uploadedTelemetry.brake[i] || 0) * 100),
+          steering: Math.round((uploadedTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+          worldX: uploadedTelemetry.car_x?.[i] ?? uploadedTelemetry.x?.[i] ?? 0,
+          worldY: uploadedTelemetry.car_z?.[i] ?? uploadedTelemetry.y?.[i] ?? 0,
+        }))
+    )
     : isDemo && demoTelem
     ? demoTelem.comp.dist_m.map((d: number, i: number) => {
         const refIdx = demoTelem.ref.dist_m.findIndex((rd: number) => rd >= d);
