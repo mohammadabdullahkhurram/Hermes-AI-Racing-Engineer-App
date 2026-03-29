@@ -189,7 +189,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
             ["Lap", lapId ? `LAP ${lapId}` : "—"],
             ["Track", "Yas Marina"],
             ["Reference", analysis?.ref_label || "—"],
-            ["Source", isUploaded ? "CSV Upload" : "AC Live"],
+            ["Source", isUploaded ? "CSV Upload" : isStoredLap ? "AC Live" : "AC Live"],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>{k}</span>
