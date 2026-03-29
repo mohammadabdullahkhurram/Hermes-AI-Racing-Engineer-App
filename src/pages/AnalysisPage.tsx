@@ -129,13 +129,22 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
     );
   }
 
+  const isBaseline = !!(analysis as any).is_baseline;
+  const potentialGain = (coaching.priority_actions || []).reduce((sum: number, a: any) => sum + a.time_gain_s, 0);
+
   const summaryCards = [
     { label: "Lap Time", value: fmtTime(analysis.comp_lap_time_s), color: C.text, sub: analysis.comp_label || "your lap" },
-    { label: "Delta to Ref", value: fmtDelta(analysis.total_time_delta_s), color: C.red, sub: `vs ${analysis.ref_label || "reference"}` },
-    { label: "Best Sector", value: analysis.sectors.reduce((best: any, s: any) => s.time_delta_s < (best?.time_delta_s ?? Infinity) ? s : best, analysis.sectors[0])?.sector_name || "—", color: C.teal, sub: "least time lost" },
-    { label: "Worst Sector", value: analysis.sectors.reduce((worst: any, s: any) => s.time_delta_s > (worst?.time_delta_s ?? -Infinity) ? s : worst, analysis.sectors[0])?.sector_name || "—", color: C.red, sub: "most time lost" },
+    ...(isBaseline ? [
+      { label: "Delta", value: "—", color: C.muted2, sub: "no comparison ref" },
+      { label: "Best Sector", value: "—", color: C.muted2, sub: "baseline only" },
+      { label: "Worst Sector", value: "—", color: C.muted2, sub: "baseline only" },
+    ] : [
+      { label: "Delta to Ref", value: fmtDelta(analysis.total_time_delta_s), color: C.red, sub: `vs ${analysis.ref_label || "reference"}` },
+      { label: "Best Sector", value: analysis.sectors.reduce((best: any, s: any) => s.time_delta_s < (best?.time_delta_s ?? Infinity) ? s : best, analysis.sectors[0])?.sector_name || "—", color: C.teal, sub: "least time lost" },
+      { label: "Worst Sector", value: analysis.sectors.reduce((worst: any, s: any) => s.time_delta_s > (worst?.time_delta_s ?? -Infinity) ? s : worst, analysis.sectors[0])?.sector_name || "—", color: C.red, sub: "most time lost" },
+    ]),
     { label: "Corners", value: `${analysis.corners?.length || 0}`, color: C.amber, sub: "analyzed" },
-    { label: "Potential Gain", value: `${((coaching.priority_actions || []).reduce((sum: number, a: any) => sum + a.time_gain_s, 0)).toFixed(3)}s`, color: C.teal, sub: "identified" },
+    { label: "Potential Gain", value: potentialGain > 0 ? `${potentialGain.toFixed(3)}s` : "—", color: potentialGain > 0 ? C.teal : C.muted2, sub: potentialGain > 0 ? "identified" : "baseline lap" },
   ];
 
   const tabs = ["speed", "throttle", "brake", "steering", "sectors"];
@@ -174,7 +183,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
             ["Lap", lapId ? `LAP ${lapId}` : "—"],
             ["Track", "Yas Marina"],
             ["Reference", analysis?.ref_label || "—"],
-            ["Source", "AC Live"],
+            ["Source", isUploaded ? "CSV Upload" : "AC Live"],
           ] as const).map(([k, v]) => (
             <div key={k} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>{k}</span>
