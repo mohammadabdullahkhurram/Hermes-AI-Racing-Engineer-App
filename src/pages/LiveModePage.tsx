@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, { text: string; color: string }> = {
 };
 
 const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
-  const { telemetry: t, connected, error } = useLiveTelemetry(300);
+  const { telemetry: t, connected, error, lapPath } = useLiveTelemetry(300);
 
 
   const active = connected && t.status === "recording";
