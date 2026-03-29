@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { C } from "../racing/tokens";
 import { Pill } from "../racing/SharedUI";
 import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
