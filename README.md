@@ -1,5 +1,30 @@
 # Hermes — AI Race Engineer
 
+## 👥 Team Members
+
+- Mohammad Abdullah Khurram  - mkhurram@constructor.university
+- David Rusiia - drusiia@constructor.university
+- Saba Khaburzania - skhaburzania@constructor.university
+
+## 🔗 Project Links
+
+- **Lovable App (Live Demo):**  
+  https://hermes-ai-racing-engineer.lovable.app
+
+- **Frontend Repository (Lovable App):**  
+  https://github.com/mohammadabdullahkhurram/Hermes-AI-Racing-Engineer-App  
+
+- **Backend Repository (Initial Version):**  
+  https://github.com/mohammadabdullahkhurram/Hermes-AI-Racing-Engineer-Backend  
+
+## 📌 Project Overview
+
+This project is an AI-powered racing coach designed to analyze driving performance and provide actionable feedback to improve lap times. It leverages sensor data and intelligent analysis to simulate real-world race engineering insights.
+
+The **backend repository** represents the initial version of the project that we built before developing the frontend in Lovable. It showcases the core system with a minimal interface, focusing on functionality such as data processing, feedback generation, and performance analysis.
+
+The **Lovable app** is the complete and final version of the project. It builds on the backend by introducing a fully developed, user-friendly frontend, making the system more interactive, accessible, and ready for real-world use.
+
 Cloud-powered telemetry analysis and real-time coaching for Assetto Corsa. Drive on your Windows PC, and Hermes automatically records every lap, runs comparative analysis against a professional reference lap, and delivers corner-by-corner coaching — all through a web app with zero local servers.
 
 ## How It Works
