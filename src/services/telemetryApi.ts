@@ -1,29 +1,9 @@
 /**
- * Telemetry API service — connects to the backend that receives
- * data from the Windows AC recorder.
- *
- * Base URL comes from:  VITE_API_BASE_URL env var  →  localStorage override  →  fallback
+ * Telemetry API service — reads live telemetry from Lovable Cloud (Supabase).
+ * No localhost dependencies.
  */
 
-// ── Base URL resolution ──────────────────────────────────────────────────────
-
-const FALLBACK_URL = "http://localhost:8080";
-
-export function getApiBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    const stored = localStorage.getItem("api_base_url");
-    if (stored) return stored;
-  }
-  return import.meta.env.VITE_API_BASE_URL || FALLBACK_URL;
-}
-
-export function setApiBaseUrl(url: string) {
-  if (url) {
-    localStorage.setItem("api_base_url", url.replace(/\/+$/, ""));
-  } else {
-    localStorage.removeItem("api_base_url");
-  }
-}
+import { supabase } from "@/integrations/supabase/client";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +35,7 @@ export interface LiveTelemetry {
   path: { px: number; py: number }[];
   history: LapHistoryItem[];
   coaching: CoachingData;
+  updated_at?: string;
 }
 
 export interface LapHistoryItem {
@@ -93,18 +74,52 @@ export const DEFAULT_TELEMETRY: LiveTelemetry = {
   },
 };
 
-// ── Fetch helpers ────────────────────────────────────────────────────────────
+// ── Fetch helpers (read from Supabase) ───────────────────────────────────────
 
 export async function fetchLiveTelemetry(): Promise<LiveTelemetry> {
-  const base = getApiBaseUrl();
-  const res = await fetch(`${base}/api/live-telemetry/latest`);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  const { data, error } = await supabase
+    .from("latest_telemetry")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  if (error || !data) throw new Error(error?.message || "No telemetry data");
+
+  const coaching = (typeof data.coaching === "object" && data.coaching !== null)
+    ? data.coaching as unknown as CoachingData
+    : DEFAULT_TELEMETRY.coaching;
+
+  const path = Array.isArray(data.path) ? data.path as unknown as { px: number; py: number }[] : [];
+  const history = Array.isArray(data.history) ? data.history as unknown as LapHistoryItem[] : [];
+
+  return {
+    status: (data.status as LiveTelemetry["status"]) || "waiting",
+    lap_num: data.lap_num ?? 1,
+    cur_time: data.cur_time ?? "0:00.000",
+    samples: data.samples ?? 0,
+    speed: data.speed ?? 0,
+    gear: data.gear ?? 0,
+    throttle: data.throttle ?? 0,
+    brake: data.brake ?? 0,
+    car_x: data.car_x ?? null,
+    car_z: data.car_z ?? null,
+    pixel_x: data.pixel_x ?? null,
+    pixel_y: data.pixel_y ?? null,
+    heading_rad: data.heading_rad ?? 0,
+    path,
+    history,
+    coaching,
+    updated_at: data.updated_at,
+  };
 }
 
 export async function fetchLapHistory(): Promise<LapHistoryItem[]> {
-  const base = getApiBaseUrl();
-  const res = await fetch(`${base}/api/laps`);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
-  return res.json();
+  const { data, error } = await supabase
+    .from("lap_history")
+    .select("lap, time, samples")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) throw new Error(error.message);
+  return (data || []) as LapHistoryItem[];
 }

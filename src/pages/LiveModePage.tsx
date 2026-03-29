@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import { C } from "../racing/tokens";
 import { Pill } from "../racing/SharedUI";
 import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
 import RealTrackMap from "../racing/RealTrackMap";
-import { getApiBaseUrl, setApiBaseUrl } from "../services/telemetryApi";
+
 
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -25,10 +25,6 @@ const STATUS_LABEL: Record<string, { text: string; color: string }> = {
 const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const { telemetry: t, connected, error } = useLiveTelemetry(300);
 
-  // Backend URL settings
-  const [showSettings, setShowSettings] = useState(false);
-  const [urlInput, setUrlInput] = useState(getApiBaseUrl());
-  const [savedUrl, setSavedUrl] = useState(getApiBaseUrl());
 
   const active = connected && t.status === "recording";
   const statusInfo = connected ? (STATUS_LABEL[t.status] || STATUS_LABEL.waiting) : { text: "DISCONNECTED", color: C.muted };
@@ -92,12 +88,6 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 <h2 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>Yas Marina Circuit</h2>
                 <p style={{ fontSize: 12, color: C.muted }}>Abu Dhabi · 5.28 km · 21 Turns</p>
               </div>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "6px 10px", borderRadius: 6, cursor: "pointer", fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}
-              >
-                ⚙
-              </button>
             </div>
             <div style={{ display: "flex", justifyContent: "center", padding: "8px 0" }}>
               <RealTrackMap
@@ -110,40 +100,6 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
                 height={400}
               />
             </div>
-            {showSettings && (
-              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, marginTop: 12 }}>
-                <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, letterSpacing: "0.1em", marginBottom: 8 }}>BACKEND URL</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="http://your-server:8080 or ngrok URL"
-                    style={{
-                      flex: 1, background: C.bg, border: `1px solid ${C.border2}`, borderRadius: 6,
-                      padding: "8px 12px", color: C.text, fontFamily: "'JetBrains Mono',monospace", fontSize: 12,
-                      outline: "none",
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      setApiBaseUrl(urlInput);
-                      setSavedUrl(urlInput);
-                      window.location.reload();
-                    }}
-                    style={{
-                      background: C.teal, color: C.bg, border: "none", borderRadius: 6,
-                      padding: "8px 16px", cursor: "pointer", fontFamily: "'Outfit',sans-serif",
-                      fontSize: 12, fontWeight: 600,
-                    }}
-                  >
-                    Save & Reconnect
-                  </button>
-                </div>
-                <div style={{ fontSize: 10, color: C.muted, marginTop: 6 }}>
-                  Current: <span style={{ color: C.muted2 }}>{savedUrl}</span>
-                </div>
-              </div>
-            )}
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

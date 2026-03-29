@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { C } from "../racing/tokens";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
-import { getApiBaseUrl } from "../services/telemetryApi";
+
 
 interface UploadLapPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -26,7 +26,7 @@ const UploadLapPage: React.FC<UploadLapPageProps> = ({ navigate }) => {
     setStatus("analyzing");
     setErrorMsg("");
     try {
-      const base = getApiBaseUrl();
+      const base = import.meta.env.VITE_SUPABASE_URL || "";
       const formData = new FormData();
       formData.append("file", file);
       const res = await fetch(`${base}/upload`, { method: "POST", body: formData });
