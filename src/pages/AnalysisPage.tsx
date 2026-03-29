@@ -102,8 +102,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
         throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
         brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
         steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
-        worldX: apiTelemetry.x?.[i] ?? apiTelemetry.car_x?.[i] ?? 0,
-        worldY: apiTelemetry.y?.[i] ?? apiTelemetry.car_z?.[i] ?? 0,
+        worldX: apiTelemetry.x?.[i] ?? 0,
+        worldY: apiTelemetry.y?.[i] ?? 0,
       })) : [];
 
   if (!isDemo && !isUploaded && (loadingAnalysis || loadingCoaching)) {
