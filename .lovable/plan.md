@@ -1,32 +1,61 @@
 
+What I verified:
+- The `backend/` folder does exist in the current repository root.
+- It contains:
+  - `backend/server.py`
+  - `backend/ac_recorder.py`
+  - `backend/ac_recorder-2.py`
+  - `backend/requirements.txt`
+  - `backend/src/analyzer.py`
+  - `backend/src/coach.py`
+  - `backend/src/dashboard.py`
+  - `backend/src/extractor.py`
+  - `backend/src/normalize.py`
+  - `backend/src/race_analyzer.py`
+- The frontend is also already wired to backend-related files:
+  - `src/services/api.ts`
+  - `src/hooks/useLiveTelemetry.ts`
+  - `src/hooks/useApiData.ts`
+  - pages like `LiveModePage.tsx`, `HomePage.tsx`, `LapHistoryPage.tsx`, `AnalysisPage.tsx` import and use them
+- Demo data references are gone; searching for `demoData` returns no matches.
 
-## Plan: Remove All Demo Data
+Why you may not see it in the code library:
+- The screenshot shows the code panel search returning “No results for ‘backend’”. That usually means the editor search is filtering by file content/name results rather than showing the folder tree directly.
+- Since this project is still a frontend Vite app, the `backend/` folder is just stored in the repo; it is not part of the preview runtime, so Lovable’s preview won’t run those Python files.
+- `README.md` is still basically empty, so there is no visible documentation in the project telling you that a Python backend was added.
 
-### What changes
-Remove `demoData.ts` entirely and update the 3 files that import from it. Pages will show empty/loading states when the backend is offline instead of fake data.
+Concise plan to fix the visibility confusion:
+1. Surface the backend clearly in the repo
+   - Add documentation in `README.md` describing the `backend/` folder and what each file does.
+   - Add a small project-structure section listing the backend files explicitly.
 
-### Files
+2. Make the backend discoverable from the frontend code
+   - Add a simple “Backend setup” or “Local backend required” note in the app UI, likely on Home or Upload page.
+   - Include the expected backend URL (`VITE_BACKEND_URL`, default `http://localhost:8080`) and mention that Python files live in `/backend`.
 
-**Delete**: `src/racing/demoData.ts`
+3. Reconcile your latest uploaded Python versions
+   - Compare your newly uploaded `ac_recorder-3.py`, `analyzer-2.py`, `coach-2.py`, `dashboard-2.py`, `extractor-2.py`, `normalize-2.py`, `race_analyzer-2.py` against the current `backend/` copies.
+   - Replace any outdated files so the repository matches your latest local backend exactly.
 
-**`src/pages/AnalysisPage.tsx`**
-- Remove import of `DEMO_ANALYSIS`, `DEMO_COACHING`, `TELEM_DATA`
-- Instead of falling back to demo data, show a "No data available" state when API returns nothing
-- Remove `isDemo` logic and "DEMO" labels
-- `analysis` and `coaching` become nullable — render empty state if null
+4. Verify backend/frontend contract
+   - Confirm `backend/server.py` still exposes the endpoints the frontend now depends on:
+     - `/laps_json`
+     - `/api/laps/:id/analysis`
+     - `/api/laps/:id/coaching`
+     - `/api/laps/:id/telemetry`
+     - `/api/live/state`
+     - `/api/driver/stats`
+   - If your latest uploaded Python files changed schemas, update the frontend types accordingly.
 
-**`src/pages/LapHistoryPage.tsx`**
-- Remove import of `DEMO_LAPS`
-- On error or no data, show empty state ("No laps recorded yet — connect your backend") instead of demo laps
-- Remove "DEMO DATA (backend offline)" indicator, replace with "Backend offline" message
+5. Optional cleanup
+   - Remove duplicate recorder versions if only one should remain (`ac_recorder.py` vs `ac_recorder-2.py`).
+   - Rename files consistently so the repo mirrors your actual local setup.
 
-**`src/pages/HomePage.tsx`**
-- Remove "View Example Analysis" button (navigates with `{ demo: true }`)
-- Keep only "LIVE MODE" and "Lap History" buttons
+Technical notes:
+- I confirmed `backend/` is not ignored by `.gitignore`.
+- I confirmed `backend/requirements.txt` exists.
+- I confirmed the current frontend imports backend hooks/services and is expecting a running backend.
+- So this is not a “plan not implemented” problem anymore; it is a repo visibility/editor discoverability problem plus possible version mismatch with your newly uploaded Python files.
 
-**`src/pages/UploadLapPage.tsx`**
-- Remove "Load Demo Data" button that navigates with `{ demo: true }`
-
-### Empty states
-Each page will show a clean "no data" message when the backend is unreachable or returns no results, styled consistently with the existing design (dark card, muted text, icon).
-
+Recommended next implementation step:
+- Update the repo so your newest uploaded backend files fully replace the current `backend/` copies and add explicit README/setup docs so the backend is unmistakably visible.
