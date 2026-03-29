@@ -30,6 +30,7 @@ export interface LapAnalysis {
   comp_label: string;
   sectors: SectorAnalysis[];
   corners: CornerAnalysis[];
+  worst_sections?: { dist_m: number; time_lost_s: number }[];
   lap_dist_m: number;
 }
 
@@ -76,6 +77,7 @@ export interface CoachingReport {
   sector_feedback: SectorFeedback[];
   corner_coaching: CornerCoaching[];
   positive_observations: string[];
+  telemetry_summary?: any;
 }
 
 export interface PriorityAction {
@@ -105,6 +107,7 @@ export interface CornerCoaching {
   fix: string;
   data_evidence: string;
   time_gain_s: number;
+  all_issues?: { issue: string; fix: string; gain: number; evidence: string }[];
 }
 
 export interface LapTelemetry {

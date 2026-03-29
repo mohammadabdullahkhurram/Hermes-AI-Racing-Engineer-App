@@ -1,13 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from "recharts";
 import { C } from "../racing/tokens";
 import { fmtTime, fmtDelta } from "../racing/formatters";
-import { BackBtn } from "../racing/SharedUI";
+import { BackBtn, Badge } from "../racing/SharedUI";
 import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
 import TrackMap from "../racing/TrackMap";
+import { sampleAnalysis, sampleCoaching } from "../data/sampleAnalysis";
 
 interface AnalysisPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -18,25 +19,53 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
   const [activeTab, setActiveTab] = useState("speed");
   const [activeCorner, setActiveCorner] = useState<string | null>(null);
 
-  const lapId = (context.lap_id as number) || null;
+  const isDemo = context.demo === true;
+  const lapId = isDemo ? null : (context.lap_id as number) || null;
 
   const { data: apiAnalysis, isLoading: loadingAnalysis } = useLapAnalysis(lapId);
   const { data: apiCoaching, isLoading: loadingCoaching } = useLapCoaching(lapId);
   const { data: apiTelemetry } = useLapTelemetry(lapId);
 
-  const analysis = apiAnalysis || null;
-  const coaching = apiCoaching || null;
+  // Demo telemetry loaded from public/data
+  const [demoTelem, setDemoTelem] = useState<any>(null);
+  useEffect(() => {
+    if (!isDemo) return;
+    fetch("/data/sample_telemetry.json")
+      .then(r => r.json())
+      .then(setDemoTelem)
+      .catch(() => {});
+  }, [isDemo]);
 
-  const telemData = apiTelemetry ? apiTelemetry.dist_m.map((d: number, i: number) => ({
-    dist: d,
-    refSpeed: 0,
-    compSpeed: Math.round(apiTelemetry.speed_kmh[i] || 0),
-    throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
-    brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
-    steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
-  })) : [];
+  const analysis = isDemo ? sampleAnalysis : (apiAnalysis || null);
+  const coaching = isDemo ? sampleCoaching : (apiCoaching || null);
 
-  if (loadingAnalysis || loadingCoaching) {
+  const telemData = isDemo && demoTelem
+    ? demoTelem.comp.dist_m.map((d: number, i: number) => {
+        // Find closest ref point by distance
+        const refIdx = demoTelem.ref.dist_m.findIndex((rd: number) => rd >= d);
+        const ri = refIdx >= 0 ? refIdx : demoTelem.ref.dist_m.length - 1;
+        return {
+          dist: d,
+          refSpeed: Math.round(demoTelem.ref.speed_kmh[ri] || 0),
+          compSpeed: Math.round(demoTelem.comp.speed_kmh[i] || 0),
+          throttle: Math.round((demoTelem.comp.throttle[i] || 0) * 100),
+          brake: Math.round((demoTelem.comp.brake[i] || 0) * 100),
+          steering: Math.round((demoTelem.comp.steering[i] || 0) * (180 / Math.PI)),
+          refThrottle: Math.round((demoTelem.ref.throttle[ri] || 0) * 100),
+          refBrake: Math.round((demoTelem.ref.brake[ri] || 0) * 100),
+          refSteering: Math.round((demoTelem.ref.steering[ri] || 0) * (180 / Math.PI)),
+        };
+      })
+    : apiTelemetry ? apiTelemetry.dist_m.map((d: number, i: number) => ({
+        dist: d,
+        refSpeed: 0,
+        compSpeed: Math.round(apiTelemetry.speed_kmh[i] || 0),
+        throttle: Math.round((apiTelemetry.throttle[i] || 0) * 100),
+        brake: Math.round((apiTelemetry.brake[i] || 0) * 100),
+        steering: Math.round((apiTelemetry.steering?.[i] || 0) * (180 / Math.PI)),
+      })) : [];
+
+  if (!isDemo && (loadingAnalysis || loadingCoaching)) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⏳</div>
@@ -93,7 +122,8 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
               <BackBtn onClick={() => navigate("history")} />
               <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 42, fontWeight: 700, color: C.text, marginTop: 12, letterSpacing: "-0.01em" }}>
                 Lap Analysis
-                {lapId && <span style={{ fontSize: 16, color: C.teal, marginLeft: 12, fontWeight: 400 }}>LAP {lapId}</span>}
+                {isDemo && <span style={{ marginLeft: 12 }}><Badge text="SAMPLE DATA" color="amber" /></span>}
+                {!isDemo && lapId && <span style={{ fontSize: 16, color: C.teal, marginLeft: 12, fontWeight: 400 }}>LAP {lapId}</span>}
               </h1>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
