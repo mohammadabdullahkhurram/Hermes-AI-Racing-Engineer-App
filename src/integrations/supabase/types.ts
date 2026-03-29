@@ -116,6 +116,33 @@ export type Database = {
         }
         Relationships: []
       }
+      reference_laps: {
+        Row: {
+          channels: Json
+          created_at: string | null
+          id: string
+          label: string
+          lap_dist_m: number
+          lap_time_s: number
+        }
+        Insert: {
+          channels: Json
+          created_at?: string | null
+          id?: string
+          label: string
+          lap_dist_m: number
+          lap_time_s: number
+        }
+        Update: {
+          channels?: Json
+          created_at?: string | null
+          id?: string
+          label?: string
+          lap_dist_m?: number
+          lap_time_s?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

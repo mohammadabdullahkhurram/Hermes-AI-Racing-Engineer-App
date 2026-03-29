@@ -6,6 +6,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 interface TelemetryRow {
   lap_time: number;
   speed_kmh: number;
@@ -28,6 +30,24 @@ interface TelemetryRow {
   brake_temp_rl: number;
   brake_temp_rr: number;
 }
+
+interface RefLap {
+  label: string;
+  lap_time_s: number;
+  lap_dist_m: number;
+  channels: {
+    dist_m: number[];
+    speed_kmh: number[];
+    throttle: number[];
+    brake: number[];
+    steering: number[];
+    time_s: number[];
+    x: number[];
+    y: number[];
+  };
+}
+
+// ── CSV Parsing ──────────────────────────────────────────────────────────────
 
 function parseCSV(text: string): TelemetryRow[] {
   const lines = text.trim().split("\n");
@@ -62,8 +82,8 @@ function parseCSV(text: string): TelemetryRow[] {
   const iBrakeTempRL = colIdx(["BrakeTempRL"]);
   const iBrakeTempRR = colIdx(["BrakeTempRR"]);
 
-  if (iSpeed < 0) throw new Error("CSV missing speed column (SpeedKmh or speed_kmh)");
-  if (iX < 0 || iZ < 0) throw new Error("CSV missing coordinate columns (CarCoordX/CarCoordZ or x/z)");
+  if (iSpeed < 0) throw new Error("CSV missing speed column");
+  if (iX < 0 || iZ < 0) throw new Error("CSV missing coordinate columns");
 
   const rows: TelemetryRow[] = [];
   let prevX = 0, prevZ = 0, cumDist = 0;
@@ -116,21 +136,14 @@ function parseCSV(text: string): TelemetryRow[] {
   return rows;
 }
 
-/**
- * Derive final lap time from LapTimeCurrent values.
- * The recorder resets LapTimeCurrent to 0 at the start of a new lap.
- * The correct lap time is the last valid (largest) value before a reset or end of data.
- */
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function deriveLapTime(rows: TelemetryRow[]): number {
   if (rows.length === 0) return 0;
-
   let maxTime = 0;
   for (const r of rows) {
     if (r.lap_time > maxTime) maxTime = r.lap_time;
   }
-
-  // If lap_time looks like seconds already (> 10), use it directly
-  // If it looks like milliseconds (> 10000), convert
   if (maxTime > 10000) return maxTime / 1000;
   return maxTime;
 }
@@ -144,156 +157,502 @@ function formatLapTime(seconds: number): string {
   return `${mins}:${whole.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
 }
 
-function computeAnalysis(rows: TelemetryRow[]) {
-  const totalDist = rows[rows.length - 1].dist_m;
+/** Linear interpolation — port of np.interp */
+function interp(xNew: number[], xSrc: number[], ySrc: number[]): number[] {
+  const out: number[] = [];
+  let j = 0;
+  for (const x of xNew) {
+    // Clamp below
+    if (x <= xSrc[0]) { out.push(ySrc[0]); continue; }
+    // Clamp above
+    if (x >= xSrc[xSrc.length - 1]) { out.push(ySrc[ySrc.length - 1]); continue; }
+    // Advance j
+    while (j < xSrc.length - 2 && xSrc[j + 1] < x) j++;
+    const t = (x - xSrc[j]) / (xSrc[j + 1] - xSrc[j] || 1);
+    out.push(ySrc[j] + t * (ySrc[j + 1] - ySrc[j]));
+  }
+  return out;
+}
+
+/** Simple rolling average for smoothing */
+function smooth(arr: number[], windowSize: number): number[] {
+  const out: number[] = [];
+  const half = Math.floor(windowSize / 2);
+  for (let i = 0; i < arr.length; i++) {
+    const start = Math.max(0, i - half);
+    const end = Math.min(arr.length, i + half + 1);
+    let sum = 0;
+    for (let j = start; j < end; j++) sum += arr[j];
+    out.push(sum / (end - start));
+  }
+  return out;
+}
+
+function median(arr: number[]): number {
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function round3(v: number): number { return Math.round(v * 1000) / 1000; }
+function round1(v: number): number { return Math.round(v * 10) / 10; }
+
+// ── Build comp lap object from CSV rows ──────────────────────────────────────
+
+function buildCompLap(rows: TelemetryRow[]): { channels: Record<string, number[]>; lap_time_s: number; lap_dist_m: number; label: string } {
   const lapTime = deriveLapTime(rows);
+  const totalDist = rows[rows.length - 1].dist_m;
 
-  const sectorCount = 3;
-  const sectorLen = totalDist / sectorCount;
-  const sectors = [];
+  return {
+    label: "uploaded_lap",
+    lap_time_s: lapTime,
+    lap_dist_m: totalDist,
+    channels: {
+      dist_m: rows.map(r => r.dist_m),
+      speed_kmh: rows.map(r => r.speed_kmh),
+      throttle: rows.map(r => r.throttle),
+      brake: rows.map(r => r.brake),
+      steering: rows.map(r => r.steering),
+      time_s: rows.map(r => r.lap_time),
+      x: rows.map(r => r.x),
+      y: rows.map(r => r.z),
+    },
+  };
+}
 
-  for (let s = 0; s < sectorCount; s++) {
-    const startM = s * sectorLen;
-    const endM = (s + 1) * sectorLen;
-    const sectorRows = rows.filter((r) => r.dist_m >= startM && r.dist_m < endM);
+// ── Align Laps (ported from analyzer.py) ─────────────────────────────────────
 
-    if (sectorRows.length === 0) {
-      sectors.push({
-        sector_id: s + 1, sector_name: `Sector ${s + 1}`,
-        start_m: startM, end_m: endM, time_delta_s: 0,
-        ref_min_speed_kmh: 0, comp_min_speed_kmh: 0, speed_delta_at_min_kmh: 0,
-        ref_max_speed_kmh: 0, comp_max_speed_kmh: 0,
-        ref_avg_brake: 0, comp_avg_brake: 0, ref_avg_throttle: 0, comp_avg_throttle: 0,
-      });
-      continue;
+function alignLaps(refLap: any, compLap: any, resolutionM = 5.0) {
+  const refDist = refLap.channels.dist_m;
+  const compDist = compLap.channels.dist_m;
+  const maxDist = Math.min(refDist[refDist.length - 1], compDist[compDist.length - 1]);
+
+  const grid: number[] = [];
+  for (let d = 0; d < maxDist; d += resolutionM) grid.push(d);
+
+  const channelsToAlign = ["speed_kmh", "throttle", "brake", "steering"];
+  const refAligned: Record<string, number[]> = {};
+  const compAligned: Record<string, number[]> = {};
+
+  for (const ch of channelsToAlign) {
+    if (refLap.channels[ch] && compLap.channels[ch]) {
+      refAligned[ch] = interp(grid, refDist, refLap.channels[ch]);
+      compAligned[ch] = interp(grid, compDist, compLap.channels[ch]);
     }
+  }
 
-    const speeds = sectorRows.map((r) => r.speed_kmh);
-    const minSpeed = Math.min(...speeds);
-    const maxSpeed = Math.max(...speeds);
-    const avgThrottle = sectorRows.reduce((a, r) => a + r.throttle, 0) / sectorRows.length;
-    const avgBrake = sectorRows.reduce((a, r) => a + r.brake, 0) / sectorRows.length;
+  // Also align x/y for telemetry output
+  refAligned.x = interp(grid, refDist, refLap.channels.x);
+  refAligned.y = interp(grid, refDist, refLap.channels.y);
+  compAligned.x = interp(grid, compDist, compLap.channels.x);
+  compAligned.y = interp(grid, compDist, compLap.channels.y);
 
-    // Estimate sector time by proportion of samples
-    const sectorTimeFraction = sectorRows.length / rows.length;
-    const sectorTime = lapTime * sectorTimeFraction;
+  // Time alignment
+  const refTime = interp(grid, refDist, refLap.channels.time_s);
+  const compTime = interp(grid, compDist, compLap.channels.time_s);
 
-    sectors.push({
-      sector_id: s + 1, sector_name: `Sector ${s + 1}`,
-      start_m: Math.round(startM * 10) / 10, end_m: Math.round(endM * 10) / 10,
-      time_delta_s: 0, // No comparison reference — neutral
-      sector_time_s: Math.round(sectorTime * 1000) / 1000,
-      ref_min_speed_kmh: minSpeed, comp_min_speed_kmh: minSpeed,
-      speed_delta_at_min_kmh: 0,
-      ref_max_speed_kmh: maxSpeed, comp_max_speed_kmh: maxSpeed,
-      ref_avg_brake: avgBrake, comp_avg_brake: avgBrake,
-      ref_avg_throttle: avgThrottle, comp_avg_throttle: avgThrottle,
+  // Delta: positive = comp slower
+  const deltaTime = compTime.map((c, i) => c - refTime[i]);
+  const deltaSpeed = compAligned.speed_kmh.map((c, i) => c - refAligned.speed_kmh[i]);
+
+  return {
+    grid_m: grid,
+    ref_time: refTime,
+    comp_time: compTime,
+    delta_time: deltaTime,
+    delta_speed: deltaSpeed,
+    ref: refAligned,
+    comp: compAligned,
+    ref_lap_time: refLap.lap_time_s,
+    comp_lap_time: compLap.lap_time_s,
+    ref_label: refLap.label || "reference",
+    comp_label: compLap.label || "uploaded_lap",
+  };
+}
+
+// ── Auto-detect corners (ported from analyzer.py) ────────────────────────────
+
+function autoDetectCorners(lap: any, minGapM = 150.0) {
+  const dist = lap.channels.dist_m;
+  const speed = lap.channels.speed_kmh;
+  const totalDist = dist[dist.length - 1] - dist[0];
+  const ptsPerM = dist.length / totalDist;
+  const windowSize = Math.max(1, Math.round(50 * ptsPerM));
+
+  const smoothed = smooth(speed, windowSize * 2);
+  const medianSpeed = median(smoothed);
+  const threshold = medianSpeed * 0.92;
+
+  const window = windowSize * 2;
+  const minima: number[] = [];
+  for (let i = window; i < smoothed.length - window; i++) {
+    let localMin = smoothed[i];
+    for (let j = i - window; j <= i + window; j++) {
+      if (smoothed[j] < localMin) localMin = smoothed[j];
+    }
+    if (smoothed[i] <= localMin + 0.01 && smoothed[i] < threshold) {
+      minima.push(i);
+    }
+  }
+
+  const corners: any[] = [];
+  let lastDist = -minGapM * 2;
+  let cornerNum = 1;
+
+  for (const idx of minima) {
+    const d = dist[idx];
+    if (d - lastDist < minGapM) continue;
+
+    const apexSpeed = smoothed[idx];
+    const pct = apexSpeed / medianSpeed;
+    let cornerType: string;
+    if (pct < 0.55) cornerType = "heavy_brake";
+    else if (pct < 0.70) cornerType = "medium_corner";
+    else if (pct < 0.82) cornerType = "light_corner";
+    else cornerType = "fast_corner";
+
+    corners.push({
+      id: `T${cornerNum}`,
+      name: `Turn ${cornerNum}`,
+      dist_m: round1(d),
+      type: cornerType,
+    });
+    lastDist = d;
+    cornerNum++;
+  }
+
+  return corners;
+}
+
+// ── Sector Analysis (ported from analyzer.py) ────────────────────────────────
+
+function autoDetectSectors(lap: any, nSectors = 3) {
+  const dist = lap.channels.dist_m;
+  const total = dist[dist.length - 1];
+  const sectorLen = total / nSectors;
+  return Array.from({ length: nSectors }, (_, i) => ({
+    id: i + 1,
+    name: `Sector ${i + 1}`,
+    start_m: round1(i * sectorLen),
+    end_m: round1((i + 1) * sectorLen),
+  }));
+}
+
+function computeSectorAnalysis(aligned: any, sectorsDef: any[]) {
+  const grid = aligned.grid_m;
+  return sectorsDef.map(sec => {
+    const indices = grid.map((d: number, i: number) => ({ d, i }))
+      .filter((p: any) => p.d >= sec.start_m && p.d < sec.end_m)
+      .map((p: any) => p.i);
+
+    if (indices.length === 0) return {
+      sector_id: sec.id, sector_name: sec.name, start_m: sec.start_m, end_m: sec.end_m,
+      time_delta_s: 0, ref_min_speed_kmh: 0, comp_min_speed_kmh: 0, speed_delta_at_min_kmh: 0,
+      ref_max_speed_kmh: 0, comp_max_speed_kmh: 0, ref_avg_brake: 0, comp_avg_brake: 0,
+      ref_avg_throttle: 0, comp_avg_throttle: 0,
+    };
+
+    const vals = (ch: Record<string, number[]>, key: string) => indices.map(i => ch[key][i]);
+    const refSpeeds = vals(aligned.ref, "speed_kmh");
+    const compSpeeds = vals(aligned.comp, "speed_kmh");
+    const deltas = indices.map(i => aligned.delta_time[i]);
+    const sectorTimeDelta = deltas[deltas.length - 1] - deltas[0];
+
+    const refMinSpeed = Math.min(...refSpeeds);
+    const compMinSpeed = Math.min(...compSpeeds);
+    const refMaxSpeed = Math.max(...refSpeeds);
+    const compMaxSpeed = Math.max(...compSpeeds);
+
+    const avg = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    const refBrakes = vals(aligned.ref, "brake");
+    const compBrakes = vals(aligned.comp, "brake");
+    const refThrottles = vals(aligned.ref, "throttle");
+    const compThrottles = vals(aligned.comp, "throttle");
+
+    return {
+      sector_id: sec.id, sector_name: sec.name, start_m: sec.start_m, end_m: sec.end_m,
+      time_delta_s: round3(sectorTimeDelta),
+      ref_min_speed_kmh: round1(refMinSpeed), comp_min_speed_kmh: round1(compMinSpeed),
+      speed_delta_at_min_kmh: round1(compMinSpeed - refMinSpeed),
+      ref_max_speed_kmh: round1(refMaxSpeed), comp_max_speed_kmh: round1(compMaxSpeed),
+      ref_avg_brake: round3(avg(refBrakes)), comp_avg_brake: round3(avg(compBrakes)),
+      ref_avg_throttle: round3(avg(refThrottles)), comp_avg_throttle: round3(avg(compThrottles)),
+    };
+  });
+}
+
+// ── Corner Analysis (ported from analyzer.py) ────────────────────────────────
+
+function computeCornerAnalysis(aligned: any, cornersDef: any[]) {
+  const grid = aligned.grid_m;
+  return cornersDef.map(corner => {
+    const apexDist = corner.dist_m;
+    const windowStart = Math.max(0, apexDist - 200);
+    const windowEnd = Math.min(grid[grid.length - 1], apexDist + 300);
+
+    const indices = grid.map((d: number, i: number) => ({ d, i }))
+      .filter((p: any) => p.d >= windowStart && p.d <= windowEnd)
+      .map((p: any) => p.i);
+
+    if (indices.length < 5) return null;
+
+    const windowVals = (ch: Record<string, number[]>, key: string) =>
+      indices.map(i => ({ d: grid[i], v: ch[key][i] }));
+
+    const refSpeeds = windowVals(aligned.ref, "speed_kmh");
+    const compSpeeds = windowVals(aligned.comp, "speed_kmh");
+    const refBrakes = windowVals(aligned.ref, "brake");
+    const compBrakes = windowVals(aligned.comp, "brake");
+    const refThrottles = windowVals(aligned.ref, "throttle");
+    const compThrottles = windowVals(aligned.comp, "throttle");
+
+    const refApexSpeed = Math.min(...refSpeeds.map(p => p.v));
+    const compApexSpeed = Math.min(...compSpeeds.map(p => p.v));
+
+    const refBrakeStart = refBrakes.find(p => p.v > 0.1)?.d ?? null;
+    const compBrakeStart = compBrakes.find(p => p.v > 0.1)?.d ?? null;
+
+    const postApexRef = refThrottles.filter(p => p.d > apexDist);
+    const postApexComp = compThrottles.filter(p => p.d > apexDist);
+    const refThrottlePickup = postApexRef.find(p => p.v > 0.3)?.d ?? null;
+    const compThrottlePickup = postApexComp.find(p => p.v > 0.3)?.d ?? null;
+
+    const apexIdx = indices.reduce((best, i) =>
+      Math.abs(grid[i] - apexDist) < Math.abs(grid[best] - apexDist) ? i : best, indices[0]);
+    const timeDeltaAtApex = aligned.delta_time[apexIdx] || 0;
+
+    // Entry speed ~100m before apex
+    const entryTargetDist = apexDist - 100;
+    const entryIndices = indices.filter(i => grid[i] <= apexDist - 50);
+    const entryIdx = entryIndices.length > 0
+      ? entryIndices.reduce((best, i) =>
+        Math.abs(grid[i] - entryTargetDist) < Math.abs(grid[best] - entryTargetDist) ? i : best, entryIndices[0])
+      : indices[0];
+    const refEntrySpeed = aligned.ref.speed_kmh[entryIdx];
+    const compEntrySpeed = aligned.comp.speed_kmh[entryIdx];
+
+    return {
+      corner_id: corner.id,
+      corner_name: corner.name,
+      corner_type: corner.type,
+      dist_m: apexDist,
+      time_delta_s: round3(timeDeltaAtApex),
+      ref_apex_speed_kmh: round1(refApexSpeed),
+      comp_apex_speed_kmh: round1(compApexSpeed),
+      apex_speed_delta_kmh: round1(compApexSpeed - refApexSpeed),
+      ref_entry_speed_kmh: round1(refEntrySpeed),
+      comp_entry_speed_kmh: round1(compEntrySpeed),
+      entry_speed_delta_kmh: round1(compEntrySpeed - refEntrySpeed),
+      ref_brake_point_m: refBrakeStart !== null ? round1(refBrakeStart) : null,
+      comp_brake_point_m: compBrakeStart !== null ? round1(compBrakeStart) : null,
+      brake_point_delta_m: refBrakeStart !== null && compBrakeStart !== null
+        ? round1(compBrakeStart - refBrakeStart) : null,
+      ref_throttle_pickup_m: refThrottlePickup !== null ? round1(refThrottlePickup) : null,
+      comp_throttle_pickup_m: compThrottlePickup !== null ? round1(compThrottlePickup) : null,
+      throttle_pickup_delta_m: refThrottlePickup !== null && compThrottlePickup !== null
+        ? round1(compThrottlePickup - refThrottlePickup) : null,
+    };
+  }).filter(Boolean);
+}
+
+// ── Coaching Engine (ported from coach.py) ───────────────────────────────────
+
+const BRAKE_POINT_EARLY_M = 5;
+const BRAKE_POINT_LATE_M = 5;
+const APEX_SPEED_LOSS_HIGH = 5;
+const APEX_SPEED_LOSS_MED = 2;
+const THROTTLE_LATE_M = 10;
+const ENTRY_SPEED_LOSS = 3;
+const SECTOR_TIME_SIG = 0.05;
+const TIME_GAIN_PER_KMH = 0.03;
+
+function sectorFeedback(sector: any) {
+  const dt = sector.time_delta_s;
+  const speedDelta = sector.speed_delta_at_min_kmh;
+  const throttleDelta = sector.comp_avg_throttle - sector.ref_avg_throttle;
+  const brakeDelta = sector.comp_avg_brake - sector.ref_avg_brake;
+
+  const issues: string[] = [];
+  const positives: string[] = [];
+
+  if (speedDelta < -APEX_SPEED_LOSS_HIGH)
+    issues.push(`Minimum corner speed is ${Math.abs(speedDelta).toFixed(1)} km/h below reference — driver is over-slowing significantly.`);
+  else if (speedDelta < -APEX_SPEED_LOSS_MED)
+    issues.push(`Carrying ${Math.abs(speedDelta).toFixed(1)} km/h less than reference through corners.`);
+  else if (speedDelta > 2)
+    positives.push(`Corner speed is ${speedDelta.toFixed(1)} km/h above reference — good commitment.`);
+
+  if (throttleDelta < -0.05)
+    issues.push(`Average throttle application is ${Math.abs(throttleDelta * 100).toFixed(0)}% lower than reference.`);
+  else if (throttleDelta > 0.05)
+    positives.push(`Throttle commitment is strong — ${(throttleDelta * 100).toFixed(0)}% higher average than reference.`);
+
+  if (brakeDelta > 0.05)
+    issues.push(`Over-braking vs reference — brake usage is ${(brakeDelta * 100).toFixed(0)}% higher on average.`);
+
+  if (!issues.length && dt < -SECTOR_TIME_SIG)
+    positives.push("Sector is clean — no major issues detected.");
+
+  const headline = issues.length > 0 ? issues[0]
+    : `Solid sector — ${Math.abs(dt).toFixed(3)}s ${dt < 0 ? "ahead of" : "off"} reference.`;
+  const detail = issues.length > 1 ? issues.slice(1).join(" ") : (positives[0] || "");
+
+  return {
+    sector: sector.sector_name, time_delta_s: dt,
+    headline, details: detail, has_issues: issues.length > 0,
+  };
+}
+
+function apexFix(corner: any, apexDelta: number, brakeDelta: number | null): string {
+  const target = `${corner.ref_apex_speed_kmh.toFixed(0)} km/h`;
+  if (brakeDelta !== null && brakeDelta < -10)
+    return `You are braking ${Math.abs(brakeDelta).toFixed(0)}m too early. Delay the brake point and commit to a later apex. Target ${target}.`;
+  if (brakeDelta !== null && brakeDelta > 5)
+    return `Despite a late brake point, apex speed is below reference. Use higher initial brake pressure. Hit ${target}.`;
+  return `Carry more speed to the apex — target ${target}. Take a wider entry to enable a later apex.`;
+}
+
+function cornerFeedback(corner: any) {
+  const issues: any[] = [];
+  const apexDelta = corner.apex_speed_delta_kmh;
+  const entryDelta = corner.entry_speed_delta_kmh;
+  const brakeDelta = corner.brake_point_delta_m;
+  const throttleDelta = corner.throttle_pickup_delta_m;
+
+  // Braking point
+  if (brakeDelta !== null) {
+    if (brakeDelta < -BRAKE_POINT_EARLY_M) {
+      issues.push({
+        issue: `Braking ${Math.abs(brakeDelta).toFixed(0)}m too early compared to reference.`,
+        fix: `Move the brake marker ${Math.abs(brakeDelta).toFixed(0)}m later. Reference brakes at ${corner.ref_brake_point_m.toFixed(0)}m, driver at ${corner.comp_brake_point_m.toFixed(0)}m.`,
+        gain: Math.abs(brakeDelta) * 0.005,
+        evidence: `Brake point: ${corner.comp_brake_point_m.toFixed(0)}m vs ${corner.ref_brake_point_m.toFixed(0)}m reference.`,
+      });
+    } else if (brakeDelta > BRAKE_POINT_LATE_M) {
+      issues.push({
+        issue: `Braking ${brakeDelta.toFixed(0)}m later than reference — risk of running wide.`,
+        fix: `Bring the brake point back by ${brakeDelta.toFixed(0)}m for consistency.`,
+        gain: 0, evidence: `Brake point: ${corner.comp_brake_point_m.toFixed(0)}m vs ${corner.ref_brake_point_m.toFixed(0)}m reference.`,
+      });
+    }
+  }
+
+  // Apex speed
+  if (apexDelta < -APEX_SPEED_LOSS_HIGH) {
+    issues.push({
+      issue: `Apex speed is ${Math.abs(apexDelta).toFixed(1)} km/h below reference (${corner.comp_apex_speed_kmh} vs ${corner.ref_apex_speed_kmh} km/h).`,
+      fix: apexFix(corner, apexDelta, brakeDelta),
+      gain: Math.abs(apexDelta) * TIME_GAIN_PER_KMH,
+      evidence: `Apex: ${corner.comp_apex_speed_kmh} km/h vs ${corner.ref_apex_speed_kmh} km/h.`,
+    });
+  } else if (apexDelta < -APEX_SPEED_LOSS_MED) {
+    issues.push({
+      issue: `Losing ${Math.abs(apexDelta).toFixed(1)} km/h at the apex (${corner.comp_apex_speed_kmh} vs ${corner.ref_apex_speed_kmh} km/h).`,
+      fix: apexFix(corner, apexDelta, brakeDelta),
+      gain: Math.abs(apexDelta) * TIME_GAIN_PER_KMH,
+      evidence: `Apex: ${corner.comp_apex_speed_kmh} km/h vs ${corner.ref_apex_speed_kmh} km/h.`,
     });
   }
 
-  // Detect corners
-  const corners: any[] = [];
-  const windowSize = Math.max(5, Math.floor(rows.length / 50));
-  for (let i = windowSize; i < rows.length - windowSize; i++) {
-    const localSpeeds = rows.slice(i - windowSize, i + windowSize + 1).map((r) => r.speed_kmh);
-    const minLocal = Math.min(...localSpeeds);
-    if (rows[i].speed_kmh <= minLocal + 2 && rows[i].brake > 0.2 && rows[i].speed_kmh < 150) {
-      const tooClose = corners.some((c) => Math.abs(c.dist_m - rows[i].dist_m) < 100);
-      if (tooClose) continue;
+  // Entry speed
+  if (entryDelta < -ENTRY_SPEED_LOSS && apexDelta >= -APEX_SPEED_LOSS_MED) {
+    issues.push({
+      issue: `Entry speed is ${Math.abs(entryDelta).toFixed(1)} km/h below reference but apex speed is acceptable — over-braking on entry.`,
+      fix: "Trail the brakes into the corner rather than releasing fully at turn-in.",
+      gain: Math.abs(entryDelta) * 0.01,
+      evidence: `Entry: ${corner.comp_entry_speed_kmh} km/h vs ${corner.ref_entry_speed_kmh} km/h.`,
+    });
+  }
 
-      let entrySpeed = rows[i].speed_kmh;
-      for (let j = i - 1; j >= 0 && rows[i].dist_m - rows[j].dist_m < 200; j--) {
-        if (rows[j].speed_kmh > entrySpeed) entrySpeed = rows[j].speed_kmh;
+  // Throttle pickup
+  if (throttleDelta !== null && throttleDelta > THROTTLE_LATE_M) {
+    issues.push({
+      issue: `Throttle pick-up is ${throttleDelta.toFixed(0)}m later than reference after the apex.`,
+      fix: `Get back to full throttle ${throttleDelta.toFixed(0)}m earlier. Reference at ${corner.ref_throttle_pickup_m.toFixed(0)}m, driver at ${corner.comp_throttle_pickup_m.toFixed(0)}m.`,
+      gain: throttleDelta * 0.004,
+      evidence: `Throttle pickup: ${corner.comp_throttle_pickup_m.toFixed(0)}m vs ${corner.ref_throttle_pickup_m.toFixed(0)}m.`,
+    });
+  }
+
+  if (!issues.length) return null;
+  const primary = issues.reduce((best, iss) => iss.gain > best.gain ? iss : best, issues[0]);
+
+  return {
+    corner: corner.corner_name, corner_type: corner.corner_type,
+    dist_m: corner.dist_m, time_delta_s: corner.time_delta_s,
+    technique_issue: primary.issue, fix: primary.fix,
+    data_evidence: primary.evidence, time_gain_s: round3(primary.gain),
+    all_issues: issues,
+  };
+}
+
+function motivationalOpener(delta: number): string {
+  if (delta <= 0) return "Excellent lap — you are ahead of the reference.";
+  if (delta < 1) return "Strong lap. The gap to reference is tight and very closeable.";
+  if (delta < 3) return "Good foundations. The time is there — it just needs unlocking corner by corner.";
+  if (delta < 6) return "Plenty of time available. Focus on the priority corners.";
+  return "Big gap to reference, but the data shows exactly where it is hiding.";
+}
+
+function motivationalCloser(totalGain: number): string {
+  if (totalGain <= 0) return "Keep pushing — consistency is the foundation of fast laps.";
+  if (totalGain < 0.5) return `Fix these points and you gain back ${totalGain.toFixed(2)}s. Small margins, big results.`;
+  if (totalGain < 1.5) return `These corrections alone are worth ${totalGain.toFixed(2)}s. A significant step forward.`;
+  return `Executing these fixes could recover ${totalGain.toFixed(2)}s — a completely different lap time.`;
+}
+
+function generateCoachingReport(analysis: any) {
+  const sectorFb = (analysis.sectors || []).map(sectorFeedback);
+  const cornerRaw = (analysis.corners || []).map(cornerFeedback).filter(Boolean);
+  const cornerCoaching = cornerRaw.sort((a: any, b: any) => b.time_gain_s - a.time_gain_s);
+
+  // Priority actions
+  const actions: any[] = [];
+  for (const c of cornerCoaching) {
+    for (const iss of c.all_issues) {
+      if (iss.gain > 0.02) {
+        actions.push({
+          location: c.corner, issue: iss.issue, instruction: iss.fix,
+          time_gain_s: round3(iss.gain), evidence: iss.evidence,
+        });
       }
-
-      corners.push({
-        corner_id: `T${corners.length + 1}`,
-        corner_name: `Turn ${corners.length + 1}`,
-        corner_type: rows[i].brake > 0.5 ? "heavy_brake" : "light_brake",
-        dist_m: Math.round(rows[i].dist_m * 10) / 10,
-        time_delta_s: 0, // No comparison — neutral
-        ref_apex_speed_kmh: rows[i].speed_kmh,
-        comp_apex_speed_kmh: rows[i].speed_kmh,
-        apex_speed_delta_kmh: 0,
-        ref_entry_speed_kmh: entrySpeed,
-        comp_entry_speed_kmh: entrySpeed,
-        entry_speed_delta_kmh: 0,
-        brake_point_delta_m: null,
-        ref_brake_point_m: null, comp_brake_point_m: null,
-        ref_throttle_pickup_m: null, comp_throttle_pickup_m: null,
-        throttle_pickup_delta_m: null,
-      });
     }
+  }
+  actions.sort((a, b) => b.time_gain_s - a.time_gain_s);
+  actions.forEach((a, i) => { a.priority = i + 1; a.confidence = a.time_gain_s > 0.1 ? "high" : "medium"; });
+  const priorityActions = actions.slice(0, 6);
+
+  const delta = analysis.total_time_delta_s;
+  const totalGain = cornerCoaching.reduce((s: number, c: any) => s + c.time_gain_s, 0);
+  const sign = delta > 0 ? "slower" : "faster";
+  const parts = [motivationalOpener(delta), `Current gap: ${Math.abs(delta).toFixed(3)}s ${sign} than reference.`];
+
+  const worstSector = (analysis.sectors || []).reduce((w: any, s: any) => s.time_delta_s > (w?.time_delta_s ?? -Infinity) ? s : w, null);
+  if (worstSector && worstSector.time_delta_s > SECTOR_TIME_SIG) {
+    parts.push(`The biggest opportunity is ${worstSector.sector_name} (${worstSector.time_delta_s > 0 ? "+" : ""}${worstSector.time_delta_s.toFixed(3)}s), where ${Math.abs(worstSector.speed_delta_at_min_kmh).toFixed(1)} km/h is being left on the table.`);
+  }
+  parts.push(motivationalCloser(totalGain));
+
+  const positives: string[] = [];
+  for (const sec of sectorFb) {
+    if (!sec.has_issues || sec.time_delta_s < -0.05)
+      positives.push(`${sec.sector}: ${Math.abs(sec.time_delta_s).toFixed(3)}s ahead of reference.`);
+  }
+  for (const c of analysis.corners || []) {
+    if (c.apex_speed_delta_kmh > 2)
+      positives.push(`${c.corner_name}: carrying ${c.apex_speed_delta_kmh.toFixed(1)} km/h more than reference at the apex.`);
   }
 
   return {
-    ref_lap_time_s: lapTime,
-    comp_lap_time_s: lapTime,
-    total_time_delta_s: 0, // No comparison reference — show neutral
-    ref_label: "baseline",
-    comp_label: "uploaded_lap",
-    sectors,
-    corners: corners.slice(0, 20),
-    worst_sections: [],
-    lap_dist_m: Math.round(totalDist * 10) / 10,
-    is_baseline: true, // Flag: this is a standalone upload, no comparison available
-  };
-}
-
-function computeCoaching(rows: TelemetryRow[], analysis: any) {
-  const avgSpeed = rows.reduce((a, r) => a + r.speed_kmh, 0) / rows.length;
-  const maxSpeed = Math.max(...rows.map((r) => r.speed_kmh));
-
-  const cornerCoaching = (analysis.corners || []).slice(0, 5).map((c: any) => ({
-    corner: c.corner_name,
-    corner_type: c.corner_type,
-    dist_m: c.dist_m,
-    time_delta_s: 0,
-    technique_issue: "Baseline recorded",
-    fix: "Use this as your reference lap for comparison",
-    data_evidence: `Apex speed: ${Math.round(c.comp_apex_speed_kmh)} km/h, Entry: ${Math.round(c.comp_entry_speed_kmh)} km/h`,
-    time_gain_s: 0,
-  }));
-
-  return {
-    overall_summary: `Uploaded lap analyzed: ${rows.length} samples, ${Math.round(analysis.lap_dist_m)}m track distance, avg ${Math.round(avgSpeed)} km/h, top ${Math.round(maxSpeed)} km/h. Lap time: ${formatLapTime(analysis.comp_lap_time_s)}.`,
-    priority_actions: [
-      {
-        location: "Full Lap",
-        issue: "Baseline lap recorded — no comparison reference available",
-        instruction: "Upload or drive more laps to generate comparative analysis",
-        time_gain_s: 0,
-        priority: 1,
-        confidence: "high",
-      },
-    ],
-    sector_feedback: (analysis.sectors || []).map((s: any) => ({
-      sector: s.sector_name,
-      time_delta_s: 0,
-      headline: `${s.sector_name}: min ${Math.round(s.comp_min_speed_kmh)} km/h, max ${Math.round(s.comp_max_speed_kmh)} km/h`,
-      has_issues: false,
-    })),
+    overall_summary: parts.join(" "),
+    priority_actions: priorityActions,
+    sector_feedback: sectorFb,
     corner_coaching: cornerCoaching,
-    positive_observations: [
-      `Full lap completed (${Math.round(analysis.lap_dist_m)}m)`,
-      `${analysis.corners.length} corners detected`,
-      `Top speed: ${Math.round(maxSpeed)} km/h`,
-    ],
+    positive_observations: positives.slice(0, 3),
   };
 }
 
-function computeTelemetry(rows: TelemetryRow[]) {
-  return {
-    dist_m: rows.map((r) => r.dist_m),
-    speed_kmh: rows.map((r) => r.speed_kmh),
-    throttle: rows.map((r) => r.throttle),
-    brake: rows.map((r) => r.brake),
-    steering: rows.map((r) => r.steering),
-    gear: rows.map((r) => r.gear),
-    x: rows.map((r) => r.x),
-    y: rows.map((r) => r.z),
-  };
-}
+// ── Main handler ─────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -309,10 +668,8 @@ Deno.serve(async (req) => {
       const formData = await req.formData();
       const file = formData.get("file");
       if (!file || !(file instanceof File)) {
-        return new Response(
-          JSON.stringify({ ok: false, error: "No file provided" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ ok: false, error: "No file provided" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       csvText = await file.text();
       filename = file.name || "upload.csv";
@@ -324,18 +681,14 @@ Deno.serve(async (req) => {
         if (body.csv) { csvText = body.csv; filename = body.filename || filename; }
         else throw new Error("No csv data");
       } catch {
-        return new Response(
-          JSON.stringify({ ok: false, error: "Unsupported content type. Send multipart/form-data with a 'file' field." }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ ok: false, error: "Unsupported content type." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
     if (!csvText.trim()) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Empty CSV file" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: "Empty CSV file" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Parse CSV
@@ -343,33 +696,109 @@ Deno.serve(async (req) => {
     try {
       rows = parseCSV(csvText);
     } catch (e) {
-      return new Response(
-        JSON.stringify({ ok: false, error: `CSV parse error: ${(e as Error).message}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, error: `CSV parse error: ${(e as Error).message}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Compute analysis
+    // Build comp lap
+    const compLap = buildCompLap(rows);
+
+    // Fetch reference lap from database
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: refData } = await supabase
+      .from("reference_laps")
+      .select("*")
+      .eq("id", "default")
+      .single();
+
     let analysis: any, coaching: any, telemetry: any;
-    try {
-      analysis = computeAnalysis(rows);
-      coaching = computeCoaching(rows, analysis);
-      telemetry = computeTelemetry(rows);
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ ok: false, error: `Analysis error: ${(e as Error).message}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+    if (refData) {
+      // Full comparative analysis
+      const refLap: RefLap = refData as any;
+
+      const aligned = alignLaps(refLap, compLap);
+      const sectorsDef = autoDetectSectors(refLap);
+      const cornersDef = autoDetectCorners(refLap);
+
+      const sectors = computeSectorAnalysis(aligned, sectorsDef);
+      const corners = computeCornerAnalysis(aligned, cornersDef);
+      const totalTimeDelta = compLap.lap_time_s - refLap.lap_time_s;
+
+      analysis = {
+        ref_lap_time_s: refLap.lap_time_s,
+        comp_lap_time_s: compLap.lap_time_s,
+        total_time_delta_s: round3(totalTimeDelta),
+        ref_label: refLap.label,
+        comp_label: "uploaded_lap",
+        sectors,
+        corners,
+        worst_sections: [],
+        lap_dist_m: round1(Math.min(refLap.lap_dist_m, compLap.lap_dist_m)),
+      };
+
+      coaching = generateCoachingReport(analysis);
+
+      // Telemetry with both ref and comp channels
+      telemetry = {
+        ref: {
+          dist_m: aligned.grid_m,
+          speed_kmh: aligned.ref.speed_kmh,
+          throttle: aligned.ref.throttle,
+          brake: aligned.ref.brake,
+          steering: aligned.ref.steering || [],
+          x: aligned.ref.x,
+          y: aligned.ref.y,
+        },
+        comp: {
+          dist_m: aligned.grid_m,
+          speed_kmh: aligned.comp.speed_kmh,
+          throttle: aligned.comp.throttle,
+          brake: aligned.comp.brake,
+          steering: aligned.comp.steering || [],
+          x: aligned.comp.x,
+          y: aligned.comp.y,
+        },
+      };
+    } else {
+      // Fallback: no reference available — standalone analysis
+      console.warn("No reference lap found, using standalone analysis");
+      const totalDist = compLap.lap_dist_m;
+      const sectorLen = totalDist / 3;
+      const sectors = Array.from({ length: 3 }, (_, i) => ({
+        sector_id: i + 1, sector_name: `Sector ${i + 1}`,
+        start_m: round1(i * sectorLen), end_m: round1((i + 1) * sectorLen),
+        time_delta_s: 0, ref_min_speed_kmh: 0, comp_min_speed_kmh: 0, speed_delta_at_min_kmh: 0,
+        ref_max_speed_kmh: 0, comp_max_speed_kmh: 0, ref_avg_brake: 0, comp_avg_brake: 0,
+        ref_avg_throttle: 0, comp_avg_throttle: 0,
+      }));
+
+      analysis = {
+        ref_lap_time_s: compLap.lap_time_s, comp_lap_time_s: compLap.lap_time_s,
+        total_time_delta_s: 0, ref_label: "baseline", comp_label: "uploaded_lap",
+        sectors, corners: [], worst_sections: [], lap_dist_m: round1(totalDist), is_baseline: true,
+      };
+      coaching = {
+        overall_summary: `Baseline lap: ${rows.length} samples, ${Math.round(totalDist)}m. No reference available for comparison.`,
+        priority_actions: [], sector_feedback: [], corner_coaching: [], positive_observations: [],
+      };
+      telemetry = {
+        dist_m: compLap.channels.dist_m,
+        speed_kmh: compLap.channels.speed_kmh,
+        throttle: compLap.channels.throttle,
+        brake: compLap.channels.brake,
+        steering: compLap.channels.steering,
+        x: compLap.channels.x,
+        y: compLap.channels.y,
+      };
     }
 
-    // Save to lap_history with source = 'uploaded'
+    // Save to lap_history
     const lapTimeFormatted = formatLapTime(analysis.comp_lap_time_s);
     try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      // Get next lap number for uploaded laps
       const { data: maxLap } = await supabase
         .from("lap_history")
         .select("lap")
@@ -390,19 +819,11 @@ Deno.serve(async (req) => {
         telemetry,
       });
     } catch (e) {
-      console.error("Failed to save uploaded lap to history:", e);
-      // Don't fail the upload if save fails — still return analysis
+      console.error("Failed to save uploaded lap:", e);
     }
 
     return new Response(
-      JSON.stringify({
-        ok: true,
-        analysis,
-        coaching,
-        telemetry,
-        samples: rows.length,
-        lap_time: lapTimeFormatted,
-      }),
+      JSON.stringify({ ok: true, analysis, coaching, telemetry, samples: rows.length, lap_time: lapTimeFormatted }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
