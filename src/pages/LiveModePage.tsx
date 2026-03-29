@@ -1,18 +1,48 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { C } from "../racing/tokens";
 import { fmtTime } from "../racing/formatters";
 import { Pill } from "../racing/SharedUI";
-import { useLiveTelemetry } from "../hooks/useLiveTelemetry";
+import { useLiveTelemetry, type CoachingEntry } from "../hooks/useLiveTelemetry";
 import { useLaps } from "../hooks/useApiData";
-import TrackMap from "../racing/TrackMap";
+import RealTrackMap from "../racing/RealTrackMap";
 
 interface LiveModePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
 }
 
+const CATEGORY_STYLE: Record<CoachingEntry["category"], { icon: string; color: string }> = {
+  brake: { icon: "🔴", color: C.red },
+  throttle: { icon: "🟢", color: C.teal },
+  corner: { icon: "🟡", color: C.amber },
+  speed: { icon: "⚡", color: C.blue },
+  delta: { icon: "📊", color: C.purple },
+  general: { icon: "💬", color: C.muted2 },
+};
+
+const MAX_PATH_HISTORY = 2000;
+
 const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const live = useLiveTelemetry(200);
   const { data: laps } = useLaps();
+
+  // Path history for driven trail on map
+  const [pathHistory, setPathHistory] = useState<{ x: number; y: number }[]>([]);
+  const lastLapRef = useRef(live.lap_num);
+
+  // Accumulate path points and clear on new lap
+  useEffect(() => {
+    if (!live.connected) return;
+    if (live.lap_num !== lastLapRef.current) {
+      setPathHistory([]);
+      lastLapRef.current = live.lap_num;
+    }
+    if (live.x !== 0 || live.y !== 0) {
+      setPathHistory(prev => {
+        const next = [...prev, { x: live.x, y: live.y }];
+        return next.length > MAX_PATH_HISTORY ? next.slice(-MAX_PATH_HISTORY) : next;
+      });
+    }
+  }, [live.x, live.y, live.lap_num, live.connected]);
 
   const active = live.connected && live.status === "recording";
   const speed = Math.round(live.speed);
@@ -22,9 +52,7 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
   const lapTime = live.lap_time;
   const lapNum = live.lap_num || 1;
   const delta = live.delta;
-  const pos = live.position;
 
-  // Session laps from backend
   const sessionLaps = (laps || []).slice(-10);
 
   const telCards = [
@@ -40,6 +68,7 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 60 }}>
+      {/* Telemetry strip */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}` }}>
         <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "stretch", overflowX: "auto", gap: 0 }}>
           {telCards.map((card, i) => (
@@ -57,7 +86,8 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "24px", display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
+      <div style={{ maxWidth: 1440, margin: "0 auto", padding: "24px", display: "grid", gridTemplateColumns: "1fr 360px", gap: 20, alignItems: "start" }}>
+        {/* Left: Map + session laps */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -73,16 +103,14 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
               )}
             </div>
             <div style={{ display: "flex", justifyContent: "center", padding: "8px 0" }}>
-              <TrackMap width={480} height={320} position={active ? pos : null} animated={active} />
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted }}>LAP PROGRESS</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.teal }}>{Math.round(pos * 100)}%</span>
-              </div>
-              <div style={{ height: 4, background: C.border2, borderRadius: 2 }}>
-                <div style={{ height: "100%", width: `${pos * 100}%`, background: `linear-gradient(90deg, ${C.teal}, ${C.tealDim})`, borderRadius: 2, transition: "width 0.2s" }} />
-              </div>
+              <RealTrackMap
+                x={live.x}
+                y={live.y}
+                pathHistory={pathHistory}
+                connected={live.connected}
+                width={600}
+                height={400}
+              />
             </div>
           </div>
 
@@ -115,16 +143,53 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
           )}
         </div>
 
+        {/* Right sidebar: Live Coach + State */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "sticky", top: 80 }}>
-          <div style={{ background: C.card, border: `1px solid rgba(15,248,192,0.15)`, borderRadius: 16, overflow: "hidden" }}>
+          {/* Live coaching feed */}
+          <div style={{ background: C.card, border: `1px solid rgba(15,248,192,0.15)`, borderRadius: 16, overflow: "hidden", maxHeight: 420 }}>
             <div style={{ background: `linear-gradient(135deg, rgba(15,248,192,0.08), transparent)`, padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.teal }} className={active ? "live-dot" : ""} />
               <span style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 16, fontWeight: 700, color: C.teal, letterSpacing: "0.05em" }}>LIVE COACH</span>
+              {live.coachingHistory.length > 0 && (
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: C.muted, marginLeft: "auto" }}>
+                  {live.coachingHistory.length} prompts
+                </span>
+              )}
             </div>
-            <div style={{ padding: 20 }}>
-              {live.coaching ? (
-                <div style={{ background: "rgba(15,248,192,0.06)", border: `1px solid rgba(15,248,192,0.2)`, borderRadius: 10, padding: "16px", marginBottom: 12 }} className="fade-in" key={live.coaching}>
-                  <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.5 }}>{live.coaching}</div>
+            <div style={{ padding: 16, overflowY: "auto", maxHeight: 340 }}>
+              {live.coachingHistory.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {live.coachingHistory.map((entry, i) => {
+                    const style = CATEGORY_STYLE[entry.category];
+                    const isLatest = i === 0;
+                    return (
+                      <div
+                        key={`${entry.timestamp}-${i}`}
+                        className={isLatest ? "fade-in" : ""}
+                        style={{
+                          background: isLatest ? "rgba(15,248,192,0.06)" : "rgba(255,255,255,0.02)",
+                          border: `1px solid ${isLatest ? "rgba(15,248,192,0.2)" : C.border}`,
+                          borderRadius: 10,
+                          padding: "12px 14px",
+                          opacity: isLatest ? 1 : Math.max(0.4, 1 - i * 0.12),
+                          transition: "opacity 0.3s",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{ fontSize: 14 }}>{style.icon}</span>
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: style.color, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                            {entry.category}
+                          </span>
+                          <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, marginLeft: "auto" }}>
+                            {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                          </span>
+                        </div>
+                        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: isLatest ? 14 : 12, fontWeight: isLatest ? 600 : 400, color: isLatest ? C.text : C.muted2, lineHeight: 1.5 }}>
+                          {entry.message}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 13 }}>
@@ -136,6 +201,7 @@ const LiveModePage: React.FC<LiveModePageProps> = ({ navigate }) => {
             </div>
           </div>
 
+          {/* Current lap state */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20 }}>
             <h3 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 15, fontWeight: 700, color: C.muted2, letterSpacing: "0.05em", marginBottom: 16 }}>CURRENT LAP STATE</h3>
             {([
