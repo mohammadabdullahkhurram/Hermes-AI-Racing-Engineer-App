@@ -1,34 +1,31 @@
-import React, { useMemo } from "react";
-import { MAP_CONFIG, worldToPixel } from "./mapConfig";
+import React from "react";
+import { MAP_CONFIG } from "./mapConfig";
 import { C } from "./tokens";
 
 interface RealTrackMapProps {
-  x: number;
-  y: number;
-  pathHistory: { x: number; y: number }[];
+  pixelX: number | null;
+  pixelY: number | null;
+  headingRad: number;
+  path: { px: number; py: number }[];
   connected: boolean;
   width?: number;
   height?: number;
 }
 
 const RealTrackMap: React.FC<RealTrackMapProps> = ({
-  x, y, pathHistory, connected, width = 600, height = 400,
+  pixelX, pixelY, headingRad, path, connected, width = 600, height = 400,
 }) => {
-  const driverPos = useMemo(() => worldToPixel(x, y), [x, y]);
-
-  const pathPoints = useMemo(() => {
-    return pathHistory.map(p => {
-      const { px, py } = worldToPixel(p.x, p.y);
-      return `${px},${py}`;
-    }).join(" ");
-  }, [pathHistory]);
-
-  // Scale factor to fit the map image into the container
   const scaleX = width / MAP_CONFIG.IMG_WIDTH;
   const scaleY = height / MAP_CONFIG.IMG_HEIGHT;
   const scale = Math.min(scaleX, scaleY);
   const scaledW = MAP_CONFIG.IMG_WIDTH * scale;
   const scaledH = MAP_CONFIG.IMG_HEIGHT * scale;
+
+  const hasPosition = pixelX != null && pixelY != null;
+
+  const pathPoints = path
+    .map(p => `${p.px},${p.py}`)
+    .join(" ");
 
   return (
     <div style={{
@@ -42,11 +39,7 @@ const RealTrackMap: React.FC<RealTrackMapProps> = ({
       <img
         src="/images/yas_marina_map.png"
         alt="Yas Marina Circuit"
-        style={{
-          width: scaledW,
-          height: scaledH,
-          display: "block",
-        }}
+        style={{ width: scaledW, height: scaledH, display: "block" }}
       />
       <svg
         viewBox={`0 0 ${MAP_CONFIG.IMG_WIDTH} ${MAP_CONFIG.IMG_HEIGHT}`}
@@ -60,7 +53,7 @@ const RealTrackMap: React.FC<RealTrackMapProps> = ({
         }}
       >
         {/* Driven path trail */}
-        {pathHistory.length > 1 && (
+        {path.length > 1 && (
           <polyline
             points={pathPoints}
             fill="none"
@@ -72,25 +65,36 @@ const RealTrackMap: React.FC<RealTrackMapProps> = ({
           />
         )}
         {/* Driver position dot */}
-        {connected && (
+        {connected && hasPosition && (
           <>
-            {/* Glow */}
             <circle
-              cx={driverPos.px}
-              cy={driverPos.py}
+              cx={pixelX}
+              cy={pixelY}
               r={MAP_CONFIG.DRAWING_SIZE * 1.8}
               fill={C.teal}
               opacity={0.2}
             />
-            {/* Core dot */}
             <circle
-              cx={driverPos.px}
-              cy={driverPos.py}
+              cx={pixelX}
+              cy={pixelY}
               r={MAP_CONFIG.DRAWING_SIZE * 0.8}
               fill={C.teal}
               stroke="white"
               strokeWidth={1.5}
             />
+            {/* Heading indicator */}
+            {headingRad !== 0 && (
+              <line
+                x1={pixelX}
+                y1={pixelY}
+                x2={pixelX + Math.cos(headingRad) * 18}
+                y2={pixelY + Math.sin(headingRad) * 18}
+                stroke={C.teal}
+                strokeWidth={2}
+                strokeLinecap="round"
+                opacity={0.7}
+              />
+            )}
           </>
         )}
       </svg>
