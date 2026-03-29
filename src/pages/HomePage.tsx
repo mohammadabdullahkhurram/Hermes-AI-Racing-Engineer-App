@@ -1,7 +1,6 @@
 import React from "react";
 import { C } from "../racing/tokens";
-
-import HeroCanvas from "../racing/HeroCanvas";
+import TrackMap from "../racing/TrackMap";
 
 interface HomePageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -16,8 +15,11 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
   return (
     <div style={{ minHeight: "100vh", background: C.bg }}>
       <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", overflow: "hidden", paddingTop: 60 }}>
-        <HeroCanvas />
-        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 60%, rgba(244,63,94,0.03) 0%, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 80% 60% at 50% 40%, rgba(15,248,192,0.04) 0%, transparent 70%)` }} />
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px), repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(30,30,38,0.4) 80px)", backgroundSize: "80px 80px" }} />
+        <div style={{ position: "absolute", top: "10%", right: "-5%", opacity: 0.06 }}>
+          <TrackMap width={600} height={420} compact />
+        </div>
         <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 760, padding: "0 32px" }} className="anim-in">
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: C.tealBg, border: `1px solid rgba(15,248,192,0.2)`, borderRadius: 20, padding: "6px 16px", marginBottom: 32 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.teal }} className="live-dot" />
