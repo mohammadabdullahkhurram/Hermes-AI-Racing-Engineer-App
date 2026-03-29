@@ -9,6 +9,7 @@ import { BackBtn, Badge } from "../racing/SharedUI";
 import { useLapAnalysis, useLapCoaching, useLapTelemetry } from "../hooks/useApiData";
 import TrackMap from "../racing/TrackMap";
 import { sampleAnalysis, sampleCoaching } from "../data/sampleAnalysis";
+import { fetchDemoLapAnalysis, fetchDemoLapCoaching, type LapAnalysis, type CoachingReport } from "../services/api";
 
 interface AnalysisPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
