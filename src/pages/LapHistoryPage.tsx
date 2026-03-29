@@ -1,9 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { C } from "../racing/tokens";
-import { fmtTime } from "../racing/formatters";
 import { Pill, Badge, BackBtn } from "../racing/SharedUI";
-import { useLaps } from "../hooks/useApiData";
-import { fetchDemoLaps } from "../services/api";
+import { fetchLapHistory, type LapHistoryItem } from "../services/telemetryApi";
 
 interface LapHistoryPageProps {
   navigate: (page: string, ctx?: Record<string, unknown>) => void;
@@ -11,36 +9,34 @@ interface LapHistoryPageProps {
 
 const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
   const [filter, setFilter] = useState("latest");
-  const { data: apiLaps, isError } = useLaps();
+  const [laps, setLaps] = useState<LapHistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  // Use API data if available, otherwise fall back to demo laps
-  const isLive = apiLaps && apiLaps.length > 0;
-  const isDemo = isError || (!isLive && !apiLaps);
-  const sourceLaps = isLive ? apiLaps : (isError ? fetchDemoLaps() : []);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await fetchLapHistory();
+        if (!cancelled) { setLaps(data); setLoading(false); }
+      } catch {
+        if (!cancelled) { setError(true); setLoading(false); }
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
-  const rawLaps = sourceLaps.map((l, i) => ({
-    id: l.lap_id,
-    lap_number: l.lap_id,
-    lap_time_s: l.lap_time_s,
-    session: l.label || "Session",
-    timestamp: l.timestamp,
-    track: "Yas Marina",
-    car: "Assetto Corsa",
-    gap_to_ref: l.gap_s === 0 ? "REF" : (l.gap_s > 0 ? `+${l.gap_s.toFixed(3)}` : `${l.gap_s.toFixed(3)}`),
-    samples: l.samples,
-    is_latest: i === sourceLaps.length - 1,
-    is_best: l.lap_time_s === Math.min(...sourceLaps.map(x => x.lap_time_s)),
-    source: isLive ? "AC Live" : "Demo",
-    lap_id: l.lap_id,
-  }));
+  const bestLap = laps.length > 0 ? laps.reduce((b, l) => l.time < b.time ? l : b, laps[0]) : null;
 
-  const sortedLaps = [...rawLaps].sort((a, b) => {
-    if (filter === "latest") return b.id - a.id;
-    if (filter === "best" || filter === "fastest") return a.lap_time_s - b.lap_time_s;
-    return b.id - a.id;
+  const sortedLaps = [...laps].sort((a, b) => {
+    if (filter === "latest") return b.lap - a.lap;
+    if (filter === "best" || filter === "fastest") return a.time.localeCompare(b.time);
+    return b.lap - a.lap;
   });
 
-  const filters = ["latest", "best", "fastest", "by track", "by car"];
+  const filters = ["latest", "best", "fastest"];
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, paddingTop: 80, paddingBottom: 80 }}>
@@ -52,9 +48,9 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
               <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 48, fontWeight: 700, color: C.text, letterSpacing: "-0.01em", marginTop: 16 }}>Lap History</h1>
               <p style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>
                 {sortedLaps.length} laps recorded
-                {isLive && <span style={{ color: C.teal, marginLeft: 8 }}>● LIVE DATA</span>}
-                {isDemo && <span style={{ color: C.amber, marginLeft: 8 }}>● DEMO DATA</span>}
-                {!isError && !isLive && !isDemo && <span style={{ color: C.muted, marginLeft: 8 }}>● Loading...</span>}
+                {!error && laps.length > 0 && <span style={{ color: C.teal, marginLeft: 8 }}>● LIVE DATA</span>}
+                {error && <span style={{ color: C.red, marginLeft: 8 }}>● BACKEND OFFLINE</span>}
+                {loading && <span style={{ color: C.muted, marginLeft: 8 }}>● Loading...</span>}
               </p>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -68,60 +64,63 @@ const LapHistoryPage: React.FC<LapHistoryPageProps> = ({ navigate }) => {
           </div>
         </div>
 
-        {sortedLaps.length === 0 && !isError && (
+        {sortedLaps.length === 0 && !loading && (
           <div style={{ textAlign: "center", padding: "80px 0", color: C.muted }}>
             <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>🏁</div>
             <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 24, fontWeight: 700, color: C.muted2, marginBottom: 8 }}>No Laps Yet</div>
-            <div style={{ fontSize: 13, color: C.muted }}>Drive a lap in Assetto Corsa — data appears here automatically</div>
+            <div style={{ fontSize: 13, color: C.muted }}>
+              {error ? "Could not reach backend. Make sure server.py is running on your Windows PC." : "Drive a lap in Assetto Corsa — data appears here automatically"}
+            </div>
+          </div>
+        )}
+
+        {loading && sortedLaps.length === 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
+            {[1, 2, 3].map(i => (
+              <div key={i} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 24, height: 160 }}>
+                <div style={{ background: C.surface, borderRadius: 6, height: 16, width: "60%", marginBottom: 12 }} className="animate-pulse" />
+                <div style={{ background: C.surface, borderRadius: 6, height: 32, width: "40%", marginBottom: 12 }} className="animate-pulse" />
+                <div style={{ background: C.surface, borderRadius: 6, height: 12, width: "80%" }} className="animate-pulse" />
+              </div>
+            ))}
           </div>
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
           {sortedLaps.map((lap, i) => {
-            const isBest = lap.is_best;
+            const isBest = bestLap && lap.time === bestLap.time && lap.lap === bestLap.lap;
             const isLatest = i === 0 && filter === "latest";
-            const borderColor = isBest ? `rgba(15,248,192,0.3)` : isLatest ? `rgba(244,63,94,0.3)` : C.border;
-            const accentColor = isBest ? C.teal : isLatest ? C.red : C.muted2;
+            const borderColor = isBest ? "rgba(15,248,192,0.3)" : isLatest ? "rgba(244,63,94,0.3)" : C.border;
             return (
-              <div key={lap.id} className="hover-card" style={{ background: C.card, border: `1px solid ${borderColor}`, borderRadius: 14, overflow: "hidden", animationDelay: `${i * 0.05}s`, transition: "all 0.25s ease" }}>
+              <div key={lap.lap} className="hover-card" style={{ background: C.card, border: `1px solid ${borderColor}`, borderRadius: 14, overflow: "hidden", transition: "all 0.25s ease" }}>
                 <div style={{ padding: "16px 20px 12px", background: isBest ? "rgba(15,248,192,0.04)" : isLatest ? "rgba(244,63,94,0.04)" : "transparent", borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                         {isBest && <Badge text="BEST" color="teal" />}
                         {isLatest && <Badge text="LATEST" color="red" />}
-                        {!isLive && <Badge text="DEMO" color="amber" />}
-                        <Pill color="muted">{lap.source}</Pill>
                       </div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, letterSpacing: "0.06em" }}>LAP {lap.lap_number}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: C.muted, letterSpacing: "0.06em" }}>LAP {lap.lap}</div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 28, fontWeight: 700, color: isBest ? C.teal : C.text, letterSpacing: "0.02em" }}>{fmtTime(lap.lap_time_s)}</div>
-                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: lap.gap_to_ref === "REF" ? C.teal : C.red, marginTop: 2 }}>{lap.gap_to_ref === "REF" ? "REFERENCE" : lap.gap_to_ref}</div>
+                      <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 28, fontWeight: 700, color: isBest ? C.teal : C.text, letterSpacing: "0.02em" }}>{lap.time}</div>
                     </div>
                   </div>
                 </div>
                 <div style={{ padding: "12px 20px" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-                    {([
-                      ["Track", lap.track],
-                      ["Car", lap.car],
-                      ["Samples", lap.samples.toLocaleString()],
-                      ["Time", lap.timestamp ? lap.timestamp.split("T")[1]?.split(".")[0] || lap.timestamp.split(" ")[1] || "" : ""],
-                    ] as const).map(([k, v]) => (
-                      <div key={k}>
-                        <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>{k}</div>
-                        <div style={{ fontSize: 12, color: C.muted2, fontWeight: 500 }}>{v}</div>
-                      </div>
-                    ))}
+                    <div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>SAMPLES</div>
+                      <div style={{ fontSize: 12, color: C.muted2, fontWeight: 500 }}>{lap.samples.toLocaleString()}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 9, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2 }}>TRACK</div>
+                      <div style={{ fontSize: 12, color: C.muted2, fontWeight: 500 }}>Yas Marina</div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>{lap.session}</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => navigate("analysis", { lap_id: lap.lap_id, demo: !isLive })} style={{ flex: 1, background: accentColor === C.teal ? C.tealBg : C.redBg, border: `1px solid ${accentColor}25`, color: accentColor, padding: "9px 0", borderRadius: 7, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" }}>
-                      View Analysis
-                    </button>
-                    <button style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted, padding: "9px 12px", borderRadius: 7, cursor: "pointer", fontSize: 13 }}>↓</button>
-                  </div>
+                  <button onClick={() => navigate("analysis", { lap_id: lap.lap })} style={{ width: "100%", background: isBest ? C.tealBg : C.redBg, border: `1px solid ${isBest ? "rgba(15,248,192,0.2)" : "rgba(244,63,94,0.2)"}`, color: isBest ? C.teal : C.red, padding: "9px 0", borderRadius: 7, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontWeight: 600, fontSize: 13, transition: "all 0.15s" }}>
+                    View Analysis
+                  </button>
                 </div>
               </div>
             );
