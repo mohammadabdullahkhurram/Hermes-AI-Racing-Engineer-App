@@ -54,6 +54,7 @@ const HomePage: React.FC<HomePageProps> = ({ navigate }) => {
             </span>
           </div>
           <h1 style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: "clamp(52px, 8vw, 96px)", fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 0.95, marginBottom: 24, color: C.text }}>
+            Hermes<br />
             AI RACE<br />
             <span style={{ color: C.teal }}>ENGINEER</span>
           </h1>

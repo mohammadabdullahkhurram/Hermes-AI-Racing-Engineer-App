@@ -18,7 +18,7 @@ const NavBar: React.FC<NavBarProps> = ({ current, navigate }) => {
       <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 32px", display: "flex", alignItems: "center", height: 60 }}>
         {/* Left: Brand */}
         <div onClick={() => navigate("home")} style={{ cursor: "pointer", flexShrink: 0 }}>
-          <span style={{ fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", color: C.text }}>AI RACE ENGINEER</span>
+          <span style={{ fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", color: C.text }}>HERMES</span>
         </div>
         {/* Center: Links */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
