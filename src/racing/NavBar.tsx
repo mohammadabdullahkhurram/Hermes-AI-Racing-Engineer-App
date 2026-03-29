@@ -17,6 +17,9 @@ const NavBar: React.FC<NavBarProps> = ({ current, navigate }) => {
   return (
     <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "rgba(10,10,12,0.92)", borderBottom: `1px solid ${C.border}`, backdropFilter: "blur(20px)" }}>
       <div style={{ maxWidth: 1440, margin: "0 auto", padding: "0 32px", display: "flex", alignItems: "center", height: 60, gap: 8 }}>
+        <div onClick={() => navigate("home")} style={{ cursor: "pointer", marginRight: 32, flexShrink: 0 }}>
+          <span style={{ fontFamily: "'Rajdhani',sans-serif", fontWeight: 700, fontSize: 16, letterSpacing: "0.05em", color: C.text }}>AI RACE ENGINEER</span>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
           {links.map(l => (
             <button key={l.id} onClick={() => navigate(l.id)}
