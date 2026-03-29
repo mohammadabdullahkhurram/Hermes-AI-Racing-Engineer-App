@@ -1,5 +1,4 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { C } from "./tokens";
 
 interface Corner {
   name: string;
@@ -15,25 +14,34 @@ interface BoundaryTrackMapProps {
   corners: Corner[];
   selectedCornerId?: string | null;
   onSelectCorner?: (id: string) => void;
-  /** Total lap distance for mapping corner dist_m to point index */
   lapDist?: number;
 }
 
 interface BoundaryData {
   boundaries: { left_border: number[][]; right_border: number[][] };
-  racing_line?: number[][];
 }
 
-function deltaToColor(delta: number): string {
-  // delta > 0 means slower (red), delta < 0 means faster (cyan)
-  if (Math.abs(delta) < 2) return "rgba(255,255,255,0.25)";
-  if (delta > 0) {
-    const t = Math.min(delta / 30, 1);
-    return `rgba(${Math.round(180 + 64 * t)}, ${Math.round(60 * (1 - t))}, ${Math.round(80 * (1 - t))}, ${0.6 + 0.4 * t})`;
+/**
+ * Exact port of dashboard.py deltaToColor():
+ * d < 0 = driver slower = red, d > 0 = driver faster = teal
+ */
+function deltaToColor(d: number): string {
+  const scale = 20;
+  const t = Math.max(-1, Math.min(1, d / scale));
+  if (t < 0) {
+    const r = 232;
+    const g = Math.round(0 + (1 + t) * 45);
+    const b = Math.round(45 * (1 + t));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const r = Math.round(t < 0.5 ? 80 : 0);
+    const g = Math.round(210 * t);
+    const b = Math.round(190 * t);
+    return `rgb(${r},${g},${b})`;
   }
-  const t = Math.min(-delta / 30, 1);
-  return `rgba(${Math.round(15 + 40 * (1 - t))}, ${Math.round(200 + 48 * t)}, ${Math.round(180 + 12 * t)}, ${0.6 + 0.4 * t})`;
 }
+
+const STEP = 6; // downsample boundary from ~6000 to ~1000 points
 
 const BoundaryTrackMap: React.FC<BoundaryTrackMapProps> = ({
   trackX, trackY, trackDelta, corners, selectedCornerId, onSelectCorner, lapDist,
@@ -45,18 +53,26 @@ const BoundaryTrackMap: React.FC<BoundaryTrackMapProps> = ({
   useEffect(() => {
     fetch("/data/yas_marina_bnd.json")
       .then(r => r.json())
-      .then(setBnd)
+      .then((data: BoundaryData) => {
+        // Downsample boundaries like dashboard.py (step=6)
+        setBnd({
+          boundaries: {
+            left_border: data.boundaries.left_border.filter((_, i) => i % STEP === 0),
+            right_border: data.boundaries.right_border.filter((_, i) => i % STEP === 0),
+          },
+        });
+      })
       .catch(() => {});
   }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container || !bnd) return;
+    if (!canvas || !container) return;
 
     const rect = container.getBoundingClientRect();
     const W = rect.width;
-    const H = Math.max(420, Math.min(520, W * 0.42));
+    const H = Math.max(320, Math.min(480, W * 0.38));
     const dpr = window.devicePixelRatio || 1;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
@@ -66,109 +82,116 @@ const BoundaryTrackMap: React.FC<BoundaryTrackMapProps> = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
 
-    // Background
-    ctx.fillStyle = "#06060a";
-    ctx.fillRect(0, 0, W, H);
+    const xs = trackX;
+    const ys = trackY;
 
-    // Collect all points for bounds
-    const allX: number[] = [];
-    const allY: number[] = [];
-    const addPts = (pts: number[][]) => pts.forEach(p => { allX.push(p[0]); allY.push(p[1]); });
-    addPts(bnd.boundaries.left_border);
-    addPts(bnd.boundaries.right_border);
-    if (trackX.length > 0) {
-      trackX.forEach(x => allX.push(x));
-      trackY.forEach(y => allY.push(y));
-    }
+    const leftBnd = bnd ? bnd.boundaries.left_border : [];
+    const rightBnd = bnd ? bnd.boundaries.right_border : [];
+
+    // Collect all points (track + boundaries) to compute unified bounds
+    const allX = [...xs, ...leftBnd.map(p => p[0]), ...rightBnd.map(p => p[0])];
+    const allY = [...ys, ...leftBnd.map(p => p[1]), ...rightBnd.map(p => p[1])];
 
     if (allX.length === 0) return;
 
     const minX = Math.min(...allX), maxX = Math.max(...allX);
     const minY = Math.min(...allY), maxY = Math.max(...allY);
-    const pad = 40;
     const rangeX = maxX - minX || 1;
     const rangeY = maxY - minY || 1;
-    const sx = (W - pad * 2) / rangeX;
-    const sy = (H - pad * 2) / rangeY;
-    const scale = Math.min(sx, sy);
-    const offX = (W - rangeX * scale) / 2;
-    const offY = (H - rangeY * scale) / 2;
+
+    // Non-uniform scale fills the canvas — matches game UI proportions
+    // No Y-flip: low Y at top, high Y at bottom
+    const pad = 48;
+    const scaleX = (W - pad * 2) / rangeX;
+    const scaleY = (H - pad * 2) / rangeY;
+    const offX = pad - minX * scaleX;
+    const offY = pad - minY * scaleY;
 
     const toCanvas = (x: number, y: number): [number, number] => [
-      offX + (x - minX) * scale,
-      offY + (y - minY) * scale,
+      x * scaleX + offX,
+      y * scaleY + offY,
     ];
 
-    // Draw boundary fill
-    const left = bnd.boundaries.left_border;
-    const right = bnd.boundaries.right_border;
-    ctx.beginPath();
-    left.forEach((p, i) => {
-      const [cx, cy] = toCanvas(p[0], p[1]);
-      i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
-    });
-    for (let i = right.length - 1; i >= 0; i--) {
-      const [cx, cy] = toCanvas(right[i][0], right[i][1]);
-      ctx.lineTo(cx, cy);
-    }
-    ctx.closePath();
-    ctx.fillStyle = "rgba(255,255,255,0.03)";
-    ctx.fill();
-
-    // Draw boundary lines
-    ctx.lineWidth = 1.2;
-    ctx.strokeStyle = "rgba(255,255,255,0.12)";
-    [left, right].forEach(border => {
+    // Draw track fill between boundaries
+    if (leftBnd.length > 0 && rightBnd.length > 0) {
       ctx.beginPath();
-      border.forEach((p, i) => {
-        const [cx, cy] = toCanvas(p[0], p[1]);
-        i === 0 ? ctx.moveTo(cx, cy) : ctx.lineTo(cx, cy);
-      });
-      ctx.stroke();
-    });
-
-    // Compute corner regions for highlighting
-    const totalDist = lapDist || (trackX.length > 0 ? (() => {
-      let d = 0;
-      for (let i = 1; i < trackX.length; i++) {
-        d += Math.sqrt((trackX[i]-trackX[i-1])**2 + (trackY[i]-trackY[i-1])**2);
+      const [lx0, ly0] = toCanvas(leftBnd[0][0], leftBnd[0][1]);
+      ctx.moveTo(lx0, ly0);
+      for (let i = 1; i < leftBnd.length; i++) {
+        const [lx, ly] = toCanvas(leftBnd[i][0], leftBnd[i][1]);
+        ctx.lineTo(lx, ly);
       }
-      return d;
-    })() : 1);
+      for (let i = rightBnd.length - 1; i >= 0; i--) {
+        const [rx, ry] = toCanvas(rightBnd[i][0], rightBnd[i][1]);
+        ctx.lineTo(rx, ry);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.fill();
 
-    // Map corner dist_m to point indices (approximate region ±50m around corner)
-    const cornerRegions: Map<string, [number, number]> = new Map();
-    if (trackX.length > 0) {
+      // Left boundary line
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      const [lbx0, lby0] = toCanvas(leftBnd[0][0], leftBnd[0][1]);
+      ctx.moveTo(lbx0, lby0);
+      for (let i = 1; i < leftBnd.length; i++) {
+        const [lx, ly] = toCanvas(leftBnd[i][0], leftBnd[i][1]);
+        ctx.lineTo(lx, ly);
+      }
+      ctx.stroke();
+
+      // Right boundary line
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,255,255,0.15)";
+      const [rbx0, rby0] = toCanvas(rightBnd[0][0], rightBnd[0][1]);
+      ctx.moveTo(rbx0, rby0);
+      for (let i = 1; i < rightBnd.length; i++) {
+        const [rx, ry] = toCanvas(rightBnd[i][0], rightBnd[i][1]);
+        ctx.lineTo(rx, ry);
+      }
+      ctx.stroke();
+    }
+
+    // Compute corner regions for turn highlighting
+    const cornerRegions = new Map<string, [number, number]>();
+    if (xs.length > 0 && corners.length > 0) {
       const dists: number[] = [0];
-      for (let i = 1; i < trackX.length; i++) {
-        dists.push(dists[i-1] + Math.sqrt((trackX[i]-trackX[i-1])**2 + (trackY[i]-trackY[i-1])**2));
+      for (let i = 1; i < xs.length; i++) {
+        dists.push(dists[i - 1] + Math.sqrt((xs[i] - xs[i - 1]) ** 2 + (ys[i] - ys[i - 1]) ** 2));
       }
       corners.forEach(c => {
-        const regionHalf = 80; // meters around corner
+        const regionHalf = 80;
         const startDist = c.dist_m - regionHalf;
         const endDist = c.dist_m + regionHalf;
-        let si = 0, ei = trackX.length - 1;
+        let si = 0, ei = xs.length - 1;
         for (let i = 0; i < dists.length; i++) {
           if (dists[i] >= startDist) { si = i; break; }
         }
         for (let i = dists.length - 1; i >= 0; i--) {
           if (dists[i] <= endDist) { ei = i; break; }
         }
-        const id = c.corner_id || c.name;
-        cornerRegions.set(id, [si, ei]);
+        cornerRegions.set(c.corner_id || c.name, [si, ei]);
       });
     }
 
-    // Draw delta-colored racing line
-    if (trackX.length > 1) {
+    // Draw delta-colored racing line on top
+    if (xs.length > 1) {
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+
       const hasSelection = !!selectedCornerId;
       const selectedRegion = selectedCornerId ? cornerRegions.get(selectedCornerId) : null;
 
-      for (let i = 1; i < trackX.length; i++) {
-        const [x0, y0] = toCanvas(trackX[i-1], trackY[i-1]);
-        const [x1, y1] = toCanvas(trackX[i], trackY[i]);
-        const delta = trackDelta[i] ?? 0;
+      for (let i = 1; i < xs.length; i++) {
+        const [x1, y1] = toCanvas(xs[i - 1], ys[i - 1]);
+        const [x2, y2] = toCanvas(xs[i], ys[i]);
+        ctx.strokeStyle = deltaToColor(trackDelta[i] || 0);
 
         let alpha = 1;
         if (hasSelection) {
@@ -180,63 +203,60 @@ const BoundaryTrackMap: React.FC<BoundaryTrackMapProps> = ({
           }
         }
 
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(x1, y1);
-        ctx.strokeStyle = deltaToColor(delta);
-        ctx.lineWidth = 3;
         ctx.globalAlpha = alpha;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // S/F marker
-    if (trackX.length > 0) {
-      const [sfx, sfy] = toCanvas(trackX[0], trackY[0]);
-      ctx.beginPath();
-      ctx.arc(sfx, sfy, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#facc15";
-      ctx.fill();
-      ctx.font = "bold 10px 'JetBrains Mono', monospace";
-      ctx.fillStyle = "#facc15";
-      ctx.fillText("S/F", sfx + 10, sfy + 4);
-    }
-
-    // Corner markers
-    if (trackX.length > 0) {
-      const dists: number[] = [0];
-      for (let i = 1; i < trackX.length; i++) {
-        dists.push(dists[i-1] + Math.sqrt((trackX[i]-trackX[i-1])**2 + (trackY[i]-trackY[i-1])**2));
-      }
-
-      corners.forEach(c => {
-        // Find closest point index
-        let bestIdx = 0;
-        let bestDiff = Infinity;
-        for (let i = 0; i < dists.length; i++) {
-          const diff = Math.abs(dists[i] - c.dist_m);
-          if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
-        }
-        const [cx, cy] = toCanvas(trackX[bestIdx], trackY[bestIdx]);
-        
-        const isSelected = selectedCornerId === (c.corner_id || c.name);
-        
         ctx.beginPath();
-        ctx.arc(cx, cy, isSelected ? 7 : 5, 0, Math.PI * 2);
-        ctx.fillStyle = isSelected ? C.teal : "rgba(255,255,255,0.5)";
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw corner labels — exact port of dashboard.py
+    if (corners.length > 0 && xs.length > 0) {
+      corners.forEach(c => {
+        // Find index closest to corner dist (approximate: dist / step_size)
+        const idx = Math.min(Math.round(c.dist_m / 5), xs.length - 1);
+        if (idx < 0 || idx >= xs.length) return;
+        const [cx, cy] = toCanvas(xs[idx], ys[idx]);
+        const isLoss = c.delta < -3;
+        const isGain = c.delta > 3;
+        const col = isLoss ? "#E8002D" : isGain ? "#00D2BE" : "#666";
+
+        // Dot
+        ctx.beginPath();
+        ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = col;
         ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 1;
+        ctx.stroke();
 
-        ctx.font = `bold ${isSelected ? 12 : 10}px 'Rajdhani', sans-serif`;
-        ctx.fillStyle = isSelected ? C.teal : "rgba(255,255,255,0.7)";
-        ctx.fillText(c.name, cx + 10, cy - 8);
+        // Label
+        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        ctx.fillStyle = col;
+        ctx.textAlign = "center";
+        ctx.fillText(c.name, cx, cy - 10);
 
-        if (c.delta !== 0) {
-          ctx.font = "10px 'JetBrains Mono', monospace";
-          ctx.fillStyle = c.delta > 0 ? C.red : C.teal;
-          ctx.fillText(`${c.delta > 0 ? "+" : ""}${c.delta.toFixed(2)}s`, cx + 10, cy + 6);
-        }
+        // Delta
+        const sign = c.delta > 0 ? "+" : "";
+        ctx.font = '9px "JetBrains Mono", monospace';
+        ctx.fillStyle = col;
+        ctx.fillText(`${sign}${c.delta.toFixed(1)}`, cx, cy - 20);
       });
+    }
+
+    // Start/finish line
+    if (xs.length > 0) {
+      const [fx, fy] = toCanvas(xs[0], ys[0]);
+      ctx.beginPath();
+      ctx.arc(fx, fy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = "#FFD700";
+      ctx.fill();
+      ctx.font = 'bold 10px "JetBrains Mono", monospace';
+      ctx.fillStyle = "#FFD700";
+      ctx.textAlign = "center";
+      ctx.fillText("S/F", fx, fy - 12);
     }
   }, [bnd, trackX, trackY, trackDelta, corners, selectedCornerId, lapDist]);
 
@@ -248,7 +268,7 @@ const BoundaryTrackMap: React.FC<BoundaryTrackMapProps> = ({
   }, [draw]);
 
   return (
-    <div ref={containerRef} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#06060a" }}>
+    <div ref={containerRef} style={{ width: "100%", borderRadius: 12, overflow: "hidden", background: "#0a0a0f" }}>
       <canvas ref={canvasRef} style={{ display: "block", width: "100%" }} />
     </div>
   );
