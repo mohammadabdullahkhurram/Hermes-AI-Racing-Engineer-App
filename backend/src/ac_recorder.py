@@ -976,10 +976,41 @@ class UIHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(204)
         self._send_cors_headers()
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Access-Control-Max-Age", "86400")
         self.end_headers()
+
+    def do_POST(self):
+        """Handle POST requests — primarily for ai_coach.py coaching messages."""
+        if self.path == "/coaching-message":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body.decode("utf-8"))
+                # Map ai_coach.py fields to coaching_state
+                coaching_state["message"]  = data.get("message", data.get("msg", ""))
+                coaching_state["sub"]      = data.get("detail", data.get("sub", ""))
+                coaching_state["severity"] = data.get("severity", "info")
+                # Optional fields from ai_coach
+                if "ref_speed" in data:
+                    coaching_state["ref_speed"]   = data["ref_speed"]
+                if "cur_speed" in data:
+                    coaching_state["cur_speed"]   = data["cur_speed"]
+                if "speed_delta" in data:
+                    coaching_state["speed_delta"] = data["speed_delta"]
+                if "dist_m" in data:
+                    coaching_state["dist_m"]      = data["dist_m"]
+                if "lap_pct" in data:
+                    coaching_state["lap_pct"]     = data["lap_pct"]
+                if "corner_ahead" in data:
+                    coaching_state["corner_ahead"] = data["corner_ahead"]
+                state["coaching"] = coaching_state.copy()
+                self._send(200, "application/json", json.dumps({"ok": True}).encode())
+            except Exception as e:
+                self._send(400, "application/json", json.dumps({"ok": False, "error": str(e)}).encode())
+        else:
+            self._send(404, "text/plain", b"Not found")
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
@@ -1369,16 +1400,20 @@ def main():
                 "lap":     lap_num,
                 "time":    state["lap_time"] or "?",
                 "samples": len(records),
+                "source":  "live",
+                "csv_text": csv_text,  # raw telemetry for cloud analysis
             }
-            state["history"].append(lap_entry)
+            state["history"].append({
+                "lap":     lap_num,
+                "time":    state["lap_time"] or "?",
+                "samples": len(records),
+            })
             state["completed_lap"] = lap_entry
             state["status"] = "sending"
 
-            # Push final lap state to cloud (async so recording can restart immediately)
+            # Push final lap state to cloud (sync before clearing completed_lap)
             if LIVE_PUSH_URL:
-                def _push_final(force=True):
-                    push_live_state(force=True)
-                threading.Thread(target=_push_final, daemon=True).start()
+                push_live_state(force=True)
 
             state.pop("completed_lap", None)
             state["status"] = "waiting"
