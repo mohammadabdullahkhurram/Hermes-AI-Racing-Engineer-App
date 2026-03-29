@@ -51,7 +51,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ navigate, context = {} }) =
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "10px 18px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}>⟳ Replay</button>
-              <button className="btn-primary" style={{ background: "transparent", border: `1px solid ${C.border2}`, color: C.muted2, padding: "10px 18px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}>↓ Export</button>
+              <button className="btn-primary btn-red-accent" style={{ padding: "10px 18px", borderRadius: 8, cursor: "pointer", fontFamily: "'Outfit',sans-serif", fontSize: 13, fontWeight: 500 }}>↓ Export</button>
             </div>
           </div>
         </div>

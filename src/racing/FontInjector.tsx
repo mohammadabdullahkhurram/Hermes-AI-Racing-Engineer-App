@@ -18,10 +18,12 @@ const FontInjector = () => (
     .fade-in { animation: fadeIn 0.5s ease both; }
     .live-dot { animation: pulse-teal 1.5s ease-in-out infinite; }
     .blink { animation: blink 1s step-end infinite; }
-    .hover-card { transition: all 0.2s ease; }
-    .hover-card:hover { transform: translateY(-2px); }
-    .btn-primary { transition: all 0.15s ease; }
-    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .hover-card { transition: all 0.25s ease; }
+    .hover-card:hover { transform: translateY(-2px); box-shadow: 0 0 18px 2px rgba(244,63,94,0.18), 0 0 6px 1px rgba(244,63,94,0.10); border-color: rgba(244,63,94,0.4) !important; }
+    .btn-primary { transition: all 0.2s ease; }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 0 14px 2px rgba(244,63,94,0.2), 0 0 4px 1px rgba(244,63,94,0.12); }
+    .btn-red-accent { background: rgba(244,63,94,0.08); border: 1px solid rgba(244,63,94,0.3); color: #f43f5e; }
+    .btn-red-accent:hover { box-shadow: 0 0 20px 3px rgba(244,63,94,0.3), 0 0 6px 1px rgba(244,63,94,0.15); border-color: #f43f5e !important; }
     .tab-active { border-bottom: 2px solid #0ff8c0; color: #0ff8c0; }
   `}</style>
 );
