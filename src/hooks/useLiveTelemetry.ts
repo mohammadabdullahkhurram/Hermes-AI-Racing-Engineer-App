@@ -5,7 +5,7 @@ import {
   type LiveTelemetry,
 } from "../services/telemetryApi";
 
-const OFFLINE_TIMEOUT_MS = 2000;
+const OFFLINE_TIMEOUT_MS = 5000;
 
 export function useLiveTelemetry(pollMs = 300) {
   const [telemetry, setTelemetry] = useState<LiveTelemetry>(DEFAULT_TELEMETRY);
@@ -26,14 +26,19 @@ export function useLiveTelemetry(pollMs = 300) {
       }
 
       setTelemetry(data);
-      setError(null);
 
-      // Connected if we got fresh data within timeout
-      if (Date.now() - lastFreshRef.current < OFFLINE_TIMEOUT_MS) {
+      const isFresh = Date.now() - lastFreshRef.current < OFFLINE_TIMEOUT_MS;
+
+      if (isFresh && data.status === "waiting") {
+        // Recent data but AC not sending yet
         setConnected(true);
+        setError("Waiting for telemetry");
+      } else if (isFresh) {
+        setConnected(true);
+        setError(null);
       } else {
         setConnected(false);
-        setError("Recorder offline / waiting for telemetry");
+        setError("Recorder offline");
       }
     } catch {
       if (Date.now() - lastFreshRef.current > OFFLINE_TIMEOUT_MS) {
