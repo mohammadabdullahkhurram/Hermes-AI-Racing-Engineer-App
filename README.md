@@ -6,10 +6,8 @@ Real-time telemetry coaching for Assetto Corsa — live feedback, lap history, a
 
 ```
 Windows Gaming PC (runs locally):
-├── ac_recorder.py     ← Reads AC shared memory, records laps, relays to cloud
-├── ai_coach.py        ← Real-time AI coaching (POSTs to recorder)
-├── server.py          ← Flask API server (legacy local mode)
-└── src/               ← Analysis & normalization modules
+├── ac_recorder.py     ← Reads AC shared memory, records laps, pushes directly to cloud
+├── ai_coach.py        ← Real-time AI coaching (POSTs to recorder on localhost)
 
 Lovable Cloud (always running):
 ├── Frontend           ← React + Vite + TypeScript + Recharts
@@ -17,6 +15,8 @@ Lovable Cloud (always running):
 ├── upload-lap         ← Edge function: CSV upload → full comparative analysis
 └── Database           ← lap_history, latest_telemetry, reference_laps tables
 ```
+
+There is **no local server required**. The recorder pushes telemetry directly to the cloud edge functions. All analysis (lap alignment, corner detection, sector comparison, coaching) runs in the cloud.
 
 ## Data Flow
 
@@ -57,62 +57,58 @@ Lovable Cloud (always running):
 │   │   ├── UploadLapPage.tsx     # CSV upload for analysis
 │   │   └── DriverProfilePage.tsx # Driver stats & progress
 │   ├── racing/
-│   │   ├── NavBar.tsx            # Top navigation bar ("HERMES" branding)
+│   │   ├── NavBar.tsx            # Top navigation ("HERMES" branding)
 │   │   ├── TrackMap.tsx          # Track visualization component
 │   │   ├── BoundaryTrackMap.tsx  # Track boundary overlay
 │   │   ├── RealTrackMap.tsx      # Real coordinate track map
 │   │   ├── SharedUI.tsx          # Shared UI components
-│   │   ├── tokens.ts             # Design tokens (colors, spacing)
-│   │   ├── formatters.ts         # Time/number formatters
-│   │   └── mapConfig.ts          # Track map configuration
+│   │   ├── tokens.ts            # Design tokens (colors, spacing)
+│   │   ├── formatters.ts        # Time/number formatters
+│   │   └── mapConfig.ts         # Track map configuration
 │   ├── services/
-│   │   ├── api.ts                # API client for Flask backend
-│   │   └── telemetryApi.ts       # Telemetry service layer
+│   │   └── telemetryApi.ts      # Telemetry service layer (cloud only)
 │   ├── hooks/
-│   │   ├── useApiData.ts         # React Query hooks for laps/analysis
-│   │   └── useLiveTelemetry.ts   # Realtime telemetry polling
-│   └── components/ui/            # shadcn/ui component library
+│   │   ├── useApiData.ts        # React Query hooks for laps/analysis
+│   │   └── useLiveTelemetry.ts  # Realtime telemetry polling from cloud DB
+│   └── components/ui/           # shadcn/ui component library
 │
-├── backend/                      # Python backend (runs on Windows gaming PC)
-│   ├── server.py                 # Flask API server (port 8080)
-│   ├── START.bat                 # One-click launcher
-│   ├── requirements.txt          # Python dependencies
-│   ├── SETUP_GUIDE.md            # Detailed setup instructions
+├── backend/                     # Python (runs on Windows gaming PC)
+│   ├── START.bat                # One-click launcher
+│   ├── requirements.txt         # Python dependencies
+│   ├── SETUP_GUIDE.md           # Detailed setup instructions
 │   └── src/
-│       ├── ac_recorder.py        # Telemetry recorder + cloud relay
-│       │                         #   - Reads AC shared memory
-│       │                         #   - do_POST handler for AI coach messages
-│       │                         #   - Includes csv_text in completed_lap
-│       │                         #   - Pushes to ingest-telemetry edge function
-│       ├── ai_coach.py           # AI coaching engine
-│       │                         #   - Analyzes live telemetry patterns
-│       │                         #   - POSTs coaching messages to recorder
-│       ├── analyzer.py           # Lap comparison & sector analysis
-│       ├── coach.py              # Coaching report generation
-│       ├── dashboard.py          # HTML dashboard builder
-│       ├── extractor.py          # Raw telemetry → structured data
-│       ├── normalize.py          # Distance-based normalization
-│       └── race_analyzer.py      # Race position & strategy analysis
+│       ├── ac_recorder.py       # Telemetry recorder + cloud relay
+│       │                        #   - Reads AC shared memory
+│       │                        #   - do_POST handler for AI coach messages
+│       │                        #   - Includes csv_text in completed_lap
+│       │                        #   - Pushes directly to cloud edge function
+│       ├── ai_coach.py          # AI coaching engine
+│       │                        #   - Analyzes live telemetry patterns
+│       │                        #   - POSTs coaching messages to recorder
+│       ├── analyzer.py          # Local analysis (legacy, not required)
+│       ├── coach.py             # Local coaching (legacy, not required)
+│       ├── normalize.py         # Distance-based normalization (legacy)
+│       └── race_analyzer.py     # Race analysis (legacy)
 │
 ├── supabase/
-│   ├── config.toml               # Supabase project config
+│   ├── config.toml              # Cloud project config
 │   └── functions/
-│       ├── ingest-telemetry/     # Edge function: live telemetry + lap analysis
-│       │   └── index.ts          #   - Receives telemetry pushes from recorder
-│       │                         #   - Updates latest_telemetry (live data)
-│       │                         #   - On completed_lap with csv_text:
-│       │                         #     runs full analysis pipeline
-│       │                         #   - Saves to lap_history with analysis/coaching
-│       └── upload-lap/           # Edge function: CSV upload analysis
-│           └── index.ts          #   - Accepts CSV file upload
-│                                 #   - Full comparative analysis vs reference
-│                                 #   - Corner detection, sector analysis
-│                                 #   - Coaching report generation
+│       ├── ingest-telemetry/    # Edge function: live telemetry + lap analysis
+│       │   └── index.ts         #   - Receives telemetry from recorder
+│       │                        #   - Updates latest_telemetry (live data)
+│       │                        #   - On completed_lap with csv_text:
+│       │                        #     runs full analysis pipeline
+│       │                        #   - Saves to lap_history
+│       └── upload-lap/          # Edge function: CSV upload analysis
+│           └── index.ts         #   - Accepts CSV file upload
+│                                #   - Full comparative analysis vs reference
+│                                #   - Corner detection, sector analysis
+│                                #   - Coaching report generation
 │
 └── public/
-    └── data/                     # Static reference data
-        ├── yas_marina_bnd.json   # Track boundary coordinates
-        └── output/               # Sample analysis outputs
+    └── data/                    # Static reference data
+        ├── yas_marina_bnd.json  # Track boundary coordinates
+        └── output/              # Sample analysis outputs
 ```
 
 ## Database Schema
@@ -125,12 +121,12 @@ Lovable Cloud (always running):
 
 ## Analysis Pipeline
 
-Both `ingest-telemetry` and `upload-lap` edge functions run the same pipeline:
+Both `ingest-telemetry` and `upload-lap` cloud functions run the same pipeline:
 
 1. **Parse CSV** — handles recorder field names (`LapTimeCurrent`, `SpeedKmh`, etc.)
 2. **Compute distance** — cumulative Euclidean distance from X/Z coordinates
 3. **Align to 5m grid** — linear interpolation onto common distance axis
-4. **Fetch reference lap** — from `reference_laps` table
+4. **Fetch reference lap** — from `reference_laps` table in cloud DB
 5. **Corner detection** — smoothed speed trace + median threshold
 6. **Sector analysis** — split into 3 sectors, compute time/speed deltas
 7. **Corner-by-corner analysis** — entry/apex/exit speed comparison
@@ -142,15 +138,11 @@ Both `ingest-telemetry` and `upload-lap` edge functions run the same pipeline:
 
 ### Frontend (deployed on Lovable)
 
-The frontend is deployed at: https://hermes-ai-racing-engineer.lovable.app
+Live at: **https://hermes-ai-racing-engineer.lovable.app**
 
-For local development:
-```bash
-npm install
-npm run dev
-```
+No local server needed — the frontend reads all data from the cloud database.
 
-### Backend (Windows gaming PC)
+### Recorder (Windows gaming PC)
 
 See [backend/SETUP_GUIDE.md](backend/SETUP_GUIDE.md) for detailed instructions.
 
@@ -159,40 +151,25 @@ Quick start:
 cd backend
 pip install -r requirements.txt
 
-# Terminal 1: Start the server
-python server.py
-
-# Terminal 2: Start the recorder
+# Terminal 1: Start the recorder (pushes telemetry to cloud)
 python src/ac_recorder.py
 
-# Terminal 3 (optional): Start AI coach
+# Terminal 2 (optional): Start AI coach
 python src/ai_coach.py
 ```
 
 Or just double-click `START.bat`.
 
-## API Endpoints (Local Flask Server)
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /laps_json` | List all recorded laps |
-| `GET /api/laps/:id/analysis` | Lap comparison analysis |
-| `GET /api/laps/:id/coaching` | AI coaching report |
-| `GET /api/laps/:id/telemetry` | Raw telemetry data |
-| `GET /api/live/state` | Current live telemetry state |
-| `GET /api/driver/stats` | Driver statistics & progress |
-| `POST /upload_lap` | Upload a lap file for analysis |
-
-## Cloud Edge Functions
+## Cloud Functions
 
 | Function | Trigger | Description |
 |----------|---------|-------------|
-| `ingest-telemetry` | POST from recorder | Receives live telemetry + completed laps with full analysis |
-| `upload-lap` | POST from frontend | CSV upload with full comparative analysis pipeline |
+| `ingest-telemetry` | POST from recorder | Receives live telemetry + completed laps, runs full analysis pipeline |
+| `upload-lap` | POST from frontend | CSV upload with full comparative analysis vs reference lap |
 
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Recharts, shadcn/ui
-- **Backend**: Python 3.10+, Flask, Assetto Corsa shared memory API
+- **Recorder**: Python 3.10+, Assetto Corsa shared memory API
 - **Cloud**: Lovable Cloud (PostgreSQL, Edge Functions, Realtime)
 - **AI Coach**: Python-based real-time coaching engine
